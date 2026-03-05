@@ -1,0 +1,35 @@
+---
+description: Android SDK and low-RAM device compatibility - enforced for Google Play and global markets
+alwaysApply: true
+---
+
+# Android Compatibility Rule
+
+All Android builds must support devices from Android 8.0 (API 26) through the latest Android version, and optimize for low-RAM devices (2GB phones) common in African and global markets.
+
+## Enforced Configuration
+
+| Property | Value | Purpose |
+| --- | --- | --- |
+| `minSdkVersion` | **26** | Android 8.0 - broad device coverage |
+| `targetSdkVersion` | **35** | Android 15 - Google Play requirement |
+| `compileSdkVersion` | **35** | Must match targetSdkVersion |
+
+**No code may reduce the minimum SDK or downgrade the target SDK.**
+
+## Where to Configure
+
+- **Expo**: Use `expo-build-properties` in `app.json` plugins
+- **React Native bare**: Set in `android/gradle.properties` and `android/app/build.gradle`
+
+## Low-RAM Optimization (2GB devices)
+
+To maximize installs on budget phones:
+
+1. **Keep minSdk 26** - Android 8.0 runs well on 2GB devices
+2. **Enable release optimizations** in `gradle.properties`:
+   - `android.enableMinifyInReleaseBuilds=true`
+   - `android.enableShrinkResourcesInReleaseBuilds=true`
+3. **Avoid large heap** - Do not request `android:largeHeap` unless strictly necessary
+4. **Lazy-load heavy screens** - Use React.lazy() for non-critical routes
+5. **Optimize images** - Use appropriate resolutions, consider WebP

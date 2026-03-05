@@ -1,0 +1,133 @@
+-- ================================================================================
+-- FIX: Multi-Month Duration Support
+-- Issue: RPC was using tier.duration_days (always 30) instead of payments.months
+-- Result: Users paying for 3/12 months only got 1 month of access
+-- ================================================================================
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.activate_subscription_from_payment(
+    p_payment_id UUID,
+    p_admin_id UUID DEFAULT NULL
+)
+RETURNS JSONB AS $$
+DECLARE
+    v_payment record;
+    v_tier record;
+    v_user_id UUID;
+    v_amount NUMERIC;
+    v_start_date TIMESTAMPTZ;
+    v_new_end_date TIMESTAMPTZ;
+    v_existing_sub record;
+    v_months NUMERIC; -- NEW: Extract months from payment
+BEGIN
+    -- 1. Get Payment Details
+    SELECT * INTO v_payment FROM public.payments WHERE id = p_payment_id;
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Payment not found');
+    END IF;
+
+    -- Check if already processed to ensure idempotency
+    IF v_payment.status = 'completed' AND v_payment.payment_status = 'completed' THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Payment already processed');
+    END IF;
+
+    v_user_id := COALESCE(v_payment.user_id, v_payment.member_id);
+    v_amount := v_payment.amount;
+    
+    -- NEW: Extract months, default to 1 if missing
+    v_months := COALESCE(v_payment.months, 1);
+
+    -- 2. Identify the Tier
+    SELECT * INTO v_tier FROM public.membership_tiers 
+    WHERE name = v_payment.membership_type 
+       OR name = v_payment.description
+       OR (price_zmw = v_amount AND active = true)
+    LIMIT 1;
+
+    IF NOT FOUND THEN
+        -- Default to Basic
+        SELECT * INTO v_tier FROM public.membership_tiers WHERE name = 'Basic';
+    END IF;
+
+    -- 3. Update Payment Status (Mark as Consumed)
+    UPDATE public.payments 
+    SET 
+        status = 'completed',
+        payment_status = 'completed',
+        approved_by = p_admin_id,
+        approved_at = NOW(),
+        paid_at = COALESCE(paid_at, NOW()),
+        updated_at = NOW()
+    WHERE id = p_payment_id;
+
+    -- 4. Insert Ledger Entry (Credit for Payment)
+    INSERT INTO public.ledger_entries (
+        user_id, amount, type, source_type, source_id, description
+    ) VALUES (
+        v_user_id, v_amount, 'credit', 'payment', p_payment_id, 
+        'Payment received via ' || COALESCE(v_payment.method, 'Manual')
+    );
+
+    -- 5. Calculate Dates & Check Existing Subscription
+    SELECT * INTO v_existing_sub 
+    FROM public.subscriptions 
+    WHERE user_id = v_user_id 
+      AND status IN ('active', 'grace_period')
+    ORDER BY ends_at DESC LIMIT 1;
+
+    -- FIXED: Use v_months instead of tier.duration_days
+    IF v_existing_sub.id IS NOT NULL AND v_existing_sub.ends_at > NOW() THEN
+        -- Extend existing
+        v_start_date := v_existing_sub.ends_at;
+        v_new_end_date := v_start_date + (v_months || ' months')::interval;
+    ELSE
+        -- Start fresh
+        v_start_date := NOW();
+        v_new_end_date := v_start_date + (v_months || ' months')::interval;
+    END IF;
+
+    -- 6. Activate/Extend Subscription
+    IF v_existing_sub.id IS NOT NULL AND v_existing_sub.status = 'active' THEN
+        -- If same tier, just extend
+        IF v_existing_sub.tier_id = v_tier.id THEN
+            UPDATE public.subscriptions 
+            SET ends_at = v_new_end_date, updated_at = NOW() 
+            WHERE id = v_existing_sub.id;
+        ELSE
+            -- New tier, create new subscription
+            INSERT INTO public.subscriptions (user_id, tier_id, status, starts_at, ends_at)
+            VALUES (v_user_id, v_tier.id, 'active', v_start_date, v_new_end_date);
+        END IF;
+    ELSE
+        INSERT INTO public.subscriptions (user_id, tier_id, status, starts_at, ends_at)
+        VALUES (v_user_id, v_tier.id, 'active', v_start_date, v_new_end_date);
+    END IF;
+
+    -- 7. Debit Ledger
+    INSERT INTO public.ledger_entries (
+        user_id, amount, type, source_type, source_id, description
+    ) VALUES (
+        v_user_id, -v_tier.price_zmw, 'debit', 'subscription_purchase', gen_random_uuid(),
+        'Purchase of ' || v_tier.name || ' (' || v_months || ' months)'
+    );
+
+    -- 8. Legacy Sync
+    UPDATE public.users SET 
+        membership_status = 'Active',
+        membership_expiry = v_new_end_date::date,
+        payment_status = 'completed',
+        updated_at = NOW()
+    WHERE id = v_user_id;
+
+    -- 9. Log Audit
+    IF p_admin_id IS NOT NULL THEN
+        INSERT INTO public.admin_audit_logs (admin_id, target_user_id, action_type, new_state)
+        VALUES (p_admin_id, v_user_id, 'PAYMENT_ACTIVATION', jsonb_build_object('payment_id', p_payment_id, 'tier', v_tier.name, 'months', v_months));
+    END IF;
+
+    RETURN jsonb_build_object('success', true, 'new_expiry', v_new_end_date, 'months_granted', v_months);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+COMMIT;
