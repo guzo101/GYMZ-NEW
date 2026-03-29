@@ -1,0 +1,41 @@
+# Keep EAS upload small (EAS installs deps itself)
+node_modules
+.git
+
+# Local caches / logs
+.expo
+.expo-shared
+.idea
+.vscode
+*.log
+
+# Native build artifacts (if present)
+android/.gradle
+android/app/build
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Exclude android/ so EAS runs prebuild (avoids tar extraction errors from long paths)
+# Prebuild will generate android/ from app.json with correct Gymz branding
+android/
+ios/
+
+# Exclude build artifacts and caches
+node_modules/
+.expo/
+.expo-shared/
+dist/
+web-build/
+*.log
+*.tmp
+*.temp
+.DS_Store
+*.iml
+.idea/
+*.hprof
+.cxx/
+*.keystore
+!debug.keystore
+images/

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gymz Icon Preview</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #1a1a1a;
+      color: #fff;
+      padding: 40px;
+      margin: 0;
+    }
+    h1 { margin-bottom: 32px; }
+    .grid {
+      display: flex;
+      gap: 48px;
+      flex-wrap: wrap;
+    }
+    .card {
+      background: #2a2a2a;
+      border-radius: 16px;
+      padding: 24px;
+      text-align: center;
+    }
+    .card h2 {
+      margin: 0 0 16px 0;
+      font-size: 18px;
+    }
+    .card p {
+      margin: 8px 0 0 0;
+      font-size: 13px;
+      color: #888;
+    }
+    .app-icon {
+      width: 128px;
+      height: 128px;
+      border-radius: 24px;
+      background: #fff;
+      padding: 16px;
+      object-fit: contain;
+    }
+    .notif-icon-wrap {
+      width: 128px;
+      height: 128px;
+      margin: 0 auto;
+      background: #0A120A;
+      border-radius: 24px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .notif-icon-wrap img {
+      width: 64px;
+      height: 64px;
+      object-fit: contain;
+    }
+  </style>
+</head>
+<body>
+  <h1>Gymz Icon Preview</h1>
+  <div class="grid">
+    <div class="card">
+      <h2>App Icon (Home Screen)</h2>
+      <img src="gymzLogoIcon.png" alt="App icon" class="app-icon">
+      <p>How it looks on your phone after install</p>
+    </div>
+    <div class="card">
+      <h2>Notification Icon</h2>
+      <div class="notif-icon-wrap">
+        <img src="notification_icon.png" alt="Notification icon">
+      </div>
+      <p>White logo on green (#0A120A) – as in notification tray</p>
+    </div>
+  </div>
+</body>
+</html>

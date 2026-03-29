@@ -1,0 +1,116 @@
+﻿\components\ConfirmationModal.tsx:23 - ConfirmationModal
+\components\GlassCard.tsx:13 - GlassCard
+\components\GradientButton.tsx:15 - GradientButton
+\components\QRScanner.tsx:19 - default
+\components\SnapshotCard.tsx:19 - SnapshotCard
+\hooks\useTheme.tsx:9 - ThemeColors (used in module)
+\screens\AccessModeSelectionScreen.tsx:64 - default
+\screens\AchievementsScreen.tsx:19 - default
+\screens\AdminConsoleScreen.tsx:30 - default
+\screens\AdminMembersScreen.tsx:24 - default
+\screens\AdminPaymentsScreen.tsx:33 - default
+\screens\AIChatScreen.tsx:174 - default
+\screens\AttendanceScreen.tsx:36 - default
+\screens\BarcodeScannerScreen.tsx:10 - default
+\screens\CommunityChatScreen.tsx:47 - default
+\screens\EditProfileScreen.tsx:23 - default
+\screens\EmailVerificationScreen.tsx:18 - default
+\screens\EventCalendarScreen.tsx:37 - default
+\screens\EventChatScreen.tsx:36 - default
+\screens\EventDetailScreen.tsx:43 - default
+\screens\EventHistoryScreen.tsx:29 - default
+\screens\EventHomeScreen.tsx:43 - default
+\screens\EventQRCheckInScreen.tsx:9 - default
+\screens\EventRoomsScreen.tsx:26 - default
+\screens\GymCalendarScreen.tsx:5 - default
+\screens\GymSelectionScreen.tsx:22 - default
+\screens\HealthMetricsScreen.tsx:39 - default
+\screens\HelpCenterScreen.tsx:16 - default
+\screens\LeaderboardScreen.tsx:21 - default
+\screens\NutritionScreen.tsx:42 - default
+\screens\PaymentsScreen.tsx:61 - default
+\screens\PendingApprovalScreen.tsx:29 - default
+\screens\PrivacyPolicyScreen.tsx:13 - default
+\screens\ProfileScreen.tsx:35 - default
+\screens\ProgressDashboardScreen.tsx:37 - default
+\screens\ResetPasswordScreen.tsx:18 - default
+\screens\RoomDashboardScreen.tsx:31 - default
+\screens\RoomsScreen.tsx:26 - default
+\screens\SettingsScreen.tsx:23 - default
+\screens\SignupScreen.tsx:21 - default
+\screens\SubscriptionPlansScreen.tsx:131 - default
+\screens\TermsOfServiceScreen.tsx:12 - default
+\services\achievementService.ts:11 - AchievementDefinition (used in module)
+\services\aiChat.ts:1084 - fetchWebhookUrl (used in module)
+\services\aiChat.ts:1172 - postAIMessageToNoticeBoard (used in module)
+\services\aiChat.ts:2 - supabase (used in module)
+\services\aiChat.ts:270 - initializeUserMemory
+\services\aiChat.ts:771 - postToInstructor (used in module)
+\services\aiChat.ts:926 - logMessageToHistory
+\services\aiChatService.ts:17 - supabase (used in module)
+\services\aiChatService.ts:545 - MESSAGE_TEMPLATES (used in module)
+\services\aiChatService.ts:545 - AI_COACH_SYSTEM_PROMPT (used in module)
+\services\analyticsService.ts:4 - AnalyticsEvent (used in module)
+\services\attendanceService.ts:36 - hasCheckedInToday (used in module)
+\services\attendanceService.ts:273 - getAllActiveSessions
+\services\attendanceService.ts:293 - getAllAttendanceHistory
+\services\attendanceService.ts:3 - AttendanceState (used in module)
+\services\attendanceService.ts:10 - CheckInData (used in module)
+\services\calendarSelectionService.ts:8 - UserCalendarSelection (used in module)
+\services\databaseNotificationService.ts:28 - NotificationData (used in module)
+\services\engagementCoordinator.ts:17 - EngagementChannel (used in module)
+\services\healthService.ts:3 - HealthLog (used in module)
+\services\mealSuggestionService.ts:7 - SuggestionFilters (used in module)
+\services\notifications.ts:68 - addNotificationResponseReceivedListener (used in module)
+\services\notifications.ts:95 - cancelAllNotifications
+\services\OpenFoodFactsService.ts:2 - OpenFoodFactsProduct (used in module)
+\services\pesapal.ts:32 - getPesapalToken (used in module)
+\services\pesapal.ts:72 - getOrRegisterIPN (used in module)
+\services\pesapal.ts:20 - PesapalTransactionStatus (used in module)
+\services\profileCompletion.ts:18 - checkProfileCompleteness (used in module)
+\services\profileCompletion.ts:8 - ProfileGaps (used in module)
+\services\progressService.ts:4 - BodyMetric (used in module)
+\services\progressService.ts:18 - FitnessGoal (used in module)
+\services\progressService.ts:36 - DailyCalorieSummary (used in module)
+\services\progressService.ts:50 - UserStreak (used in module)
+\services\progressService.ts:60 - ExerciseProgress (used in module)
+\services\progressService.ts:73 - AchievementBadge (used in module)
+\services\progressService.ts:86 - UserBadgeProgress (used in module)
+\services\progressService.ts:96 - UserLevel (used in module)
+\services\progressService.ts:106 - WeeklySummary (used in module)
+\services\retentionOrchestrator.ts:239 - retentionOrchestrator
+\services\secureQRService.ts:123 - fetchUserSubscription
+\services\secureQRService.ts:217 - generateSecureQRCode
+\services\secureQRService.ts:248 - encodeQRData
+\services\secureQRService.ts:255 - getQRTimeRemaining
+\services\secureQRService.ts:11 - SubscriptionData (used in module)
+\services\secureQRService.ts:20 - SecureQRData (used in module)
+\services\streakService.ts:11 - StreakType (used in module)
+\services\workoutService.ts:4 - WorkoutLog (used in module)
+\theme\colors.ts:1 - colors
+\theme\designSystem.ts:266 - DesignSystem
+\theme\typography.ts:3 - typography
+\types\calendar.ts:3 - CalendarItemMetadata (used in module)
+\types\database.ts:1 - Json (used in module)
+\utils\databaseDiagnostics.ts:8 - runDatabaseDiagnostics (used in module)
+\utils\healthMath.ts:21 - getBMICategory
+\utils\healthMath.ts:33 - MET_VALUES (used in module)
+\utils\healthMath.ts:82 - ACTIVITY_MULTIPLIERS (used in module)
+\utils\userUtils.ts:8 - generateUniqueUserId (used in module)
+\utils\userUtils.ts:24 - generateThreadId (used in module)
+\utils\userUtils.ts:42 - getOrCreateThreadId
+\utils\userUtils.ts:101 - generateAndVerifyUniqueUserId
+\components\dashboard\DailyStatsRow.tsx:15 - DailyStatsRow
+\components\dashboard\FitnessPatternBackground.tsx:8 - FitnessPatternBackground
+\components\dashboard\GamificationCard.tsx:18 - GamificationCard
+\components\dashboard\LeaderboardBanner.tsx:14 - LeaderboardBanner
+\components\dashboard\QuickActions.tsx:14 - QuickActions
+\components\dashboard\RecentActivityFeed.tsx:21 - RecentActivityFeed
+\components\dashboard\SimplisticCalorieCard.tsx:11 - SimplisticCalorieCard
+\components\dashboard\UnifiedMacroCard.tsx:13 - UnifiedMacroCard
+\components\dashboard\WeeklyGoalProgress.tsx:12 - WeeklyGoalProgress
+\components\room\MemberProgressDots.tsx:10 - MemberProgressDots
+\components\room\RoomAchievements.tsx:13 - RoomAchievements
+\components\calendar\views\MonthView.tsx:26 - MonthView
+\components\calendar\views\ScheduleView.tsx:14 - ScheduleView
+\components\calendar\views\TimeGridView.tsx:26 - TimeGridView

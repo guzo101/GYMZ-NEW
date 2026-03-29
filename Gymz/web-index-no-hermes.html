@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+  <title>Gymz (Web - JSC)</title>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body { overflow: hidden; }
+    #root { display: flex; height: 100%; flex: 1; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <!-- Load bundle WITHOUT hermes params so Metro uses app.json jsEngine: jsc -->
+  <script src="http://localhost:8081/index.ts.bundle?platform=web&dev=true&hot=false&lazy=false&minify=false"></script>
+</body>
+</html>

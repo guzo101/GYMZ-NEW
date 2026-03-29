@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gymz Push Notification Preview</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a1a;
+      color: #fff;
+      padding: 40px;
+      margin: 0;
+      min-height: 100vh;
+    }
+    h1 {
+      margin-bottom: 8px;
+      font-size: 24px;
+    }
+    .subtitle {
+      color: #888;
+      font-size: 14px;
+      margin-bottom: 32px;
+    }
+    .phone-mockup {
+      width: 320px;
+      margin: 0 auto;
+      background: #0d0d0d;
+      border-radius: 36px;
+      padding: 12px;
+      box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+    }
+    .phone-screen {
+      background: #1a1a1a;
+      border-radius: 28px;
+      padding: 48px 16px 24px;
+      min-height: 560px;
+    }
+    .status-bar {
+      height: 24px;
+      margin: -32px -16px 16px -16px;
+      background: #0d0d0d;
+      border-radius: 0 0 20px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      font-size: 13px;
+      color: #fff;
+    }
+    .notification {
+      background: #2a2a2a;
+      border-radius: 16px;
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .notif-icon {
+      width: 40px;
+      height: 40px;
+      min-width: 40px;
+      background: #0A120A;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px;
+    }
+    .notif-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .notif-content {
+      flex: 1;
+      min-width: 0;
+    }
+    .notif-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 2px;
+    }
+    .notif-app-name {
+      font-size: 13px;
+      color: #888;
+      font-weight: 500;
+    }
+    .notif-time {
+      font-size: 12px;
+      color: #666;
+    }
+    .notif-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 2px;
+    }
+    .notif-body {
+      font-size: 14px;
+      color: #aaa;
+      line-height: 1.4;
+    }
+    .label {
+      text-align: center;
+      margin-top: 24px;
+      color: #666;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Push Notification Preview</h1>
+  <p class="subtitle">How your Gymz notifications will look on Android</p>
+
+  <div class="phone-mockup">
+    <div class="phone-screen">
+      <div class="status-bar">9:41 &nbsp; &#x1F4F1; &#x1F4F2; &#x1F50B;</div>
+
+      <div class="notification">
+        <div class="notif-icon">
+          <img src="notification_icon.png" alt="Gymz">
+        </div>
+        <div class="notif-content">
+          <div class="notif-header">
+            <span class="notif-app-name">Gymz</span>
+            <span class="notif-time">now</span>
+          </div>
+          <div class="notif-title">Morning Fuel ☕</div>
+          <div class="notif-body">Dinner is the foundation of tomorrow's gains. Log it! 🏗️</div>
+        </div>
+      </div>
+
+      <div class="notification">
+        <div class="notif-icon">
+          <img src="notification_icon.png" alt="Gymz">
+        </div>
+        <div class="notif-content">
+          <div class="notif-header">
+            <span class="notif-app-name">Gymz</span>
+            <span class="notif-time">2 min ago</span>
+          </div>
+          <div class="notif-title">Class Reminder</div>
+          <div class="notif-body">Your yoga class starts in 30 minutes. See you there!</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="label">Gymz branding • Your logo • No Expo</p>
+</body>
+</html>

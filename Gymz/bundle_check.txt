@@ -1,0 +1,10 @@
+Starting Metro Bundler
+Android .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android .\index.ts ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 68.9% (1279/1541)
+Android .\index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.6% (2180/2184)
+Android .\index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (2185/2185)
+Android Bundled 13313ms index.ts (2185 modules)
+Android .\index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (2185/2185)
+Writing bundle output to: C:\Users\musam\AppData\Local\Temp\b53wjrr7cbe\index.js
+Copying 43 asset files
+Done writing bundle output

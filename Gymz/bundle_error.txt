@@ -1,0 +1,46 @@
+Starting Metro Bundler
+Android .\index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android .\index.ts ░░░░░░░░░░░░░░░░  4.0% ( 5/35)
+Android .\index.ts ▓▓░░░░░░░░░░░░░░ 14.4% (30/79)
+Android .\index.ts ▓▓▓▓░░░░░░░░░░░░ 27.7% (107/248)
+Android .\index.ts ▓▓▓▓▓░░░░░░░░░░░ 31.5% (286/552)
+Android .\index.ts ▓▓▓▓▓░░░░░░░░░░░ 34.0% (464/819)
+Android .\index.ts ▓▓▓▓▓░░░░░░░░░░░ 34.0% (491/891)
+Android .\index.ts ▓▓▓▓▓▓▓░░░░░░░░░ 48.0% (671/969)
+Android .\index.ts ▓▓▓▓▓▓▓▓░░░░░░░░ 55.9% ( 839/1131)
+Android .\index.ts ▓▓▓▓▓▓▓▓▓░░░░░░░ 56.9% ( 972/1427)
+Android .\index.ts ▓▓▓▓▓▓▓▓▓░░░░░░░ 56.9% (1161/1567)
+Android .\index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░ 82.8% (1489/1638)
+Android .\index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 93.7% (1808/1868)
+Android .\index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 98.3% (2144/2163)
+Android Bundling failed 46271ms index.ts (2178 modules)
+Error: Unable to resolve module ../../hooks/useTheme from C:\Users\musam\Desktop\AI\Gymz\GYMZ\GYMZ\Cursor\Gymz\components\coachBubble\drama\DualBubbleOverlay.tsx: 
+
+None of these files exist:
+  * components\hooks\useTheme(.android.ts|.native.ts|.ts|.android.tsx|.native.tsx|.tsx|.android.mjs|.native.mjs|.mjs|.android.js|.native.js|.js|.android.jsx|.native.jsx|.jsx|.android.json|.native.json|.json|.android.cjs|.native.cjs|.cjs|.android.scss|.native.scss|.scss|.android.sass|.native.sass|.sass|.android.css|.native.css|.css)
+  * components\hooks\useTheme
+[0m [90m 14 |[39m [36mimport[39m [33mReact[39m[33m,[39m { useEffect[33m,[39m useRef } [36mfrom[39m [32m'react'[39m[33m;[39m
+ [90m 15 |[39m [36mimport[39m { [33mStyleSheet[39m[33m,[39m [33mView[39m } [36mfrom[39m [32m'react-native'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 16 |[39m [36mimport[39m { useTheme } [36mfrom[39m [32m'../../hooks/useTheme'[39m[33m;[39m
+ [90m    |[39m                           [31m[1m^[22m[39m
+ [90m 17 |[39m [36mimport[39m { useDramaDirector } [36mfrom[39m [32m'./useDramaDirector'[39m[33m;[39m
+ [90m 18 |[39m [36mimport[39m { [33mBubbleActor[39m } [36mfrom[39m [32m'./BubbleActor'[39m[33m;[39m
+ [90m 19 |[39m [36mimport[39m { loginScripts } [36mfrom[39m [32m'./scripts/loginScripts'[39m[33m;[39m[0m
+
+Import stack:
+
+ components\coachBubble\drama\DualBubbleOverlay.tsx
+ | import "../../hooks/useTheme"
+
+ navigation\AppNavigator.tsx
+ | import "../components/coachBubble/drama/DualBubbleOverlay"
+
+ App.tsx
+ | import "./navigation/AppNavigator"
+
+ index.ts
+ | import "./App"
+
+ 
+ | import "C:/Users/musam/Desktop/AI/Gymz/GYMZ/GYMZ/Cursor/Gymz/index.ts"
+
