@@ -6,9 +6,13 @@
 
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { CheckCircle2, XCircle, User, Calendar, Clock, Dumbbell, CalendarCheck } from "lucide-react";
 import { format } from "date-fns";
 import { verifyMemberHasAccess } from "@/services/attendanceService";
+import { generateOnboardingAssessmentPdf } from "@/services/memberAssessmentReportService";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 
 export interface SelfCheckInNotification {
   id: string;
@@ -30,6 +34,7 @@ export function SelfCheckInNotificationPopup({
   onOpenChange,
   notification,
 }: SelfCheckInNotificationPopupProps) {
+  const { user } = useAuth();
   const [memberDetails, setMemberDetails] = useState<{
     membershipStatus?: string | null;
     renewalDueDate?: string | null;
@@ -79,6 +84,20 @@ export function SelfCheckInNotificationPopup({
     ? String(memberDetails.membershipStatus).charAt(0).toUpperCase() +
       String(memberDetails.membershipStatus).slice(1).toLowerCase()
     : null;
+
+  const handlePrintAssessment = async () => {
+    if (!notification?.user_id) {
+      toast.error("Unable to print assessment: member ID unavailable.");
+      return;
+    }
+    try {
+      await generateOnboardingAssessmentPdf(notification.user_id, user?.name || user?.email || "Admin");
+      toast.success("Onboarding assessment generated.");
+    } catch (error: any) {
+      console.error("Failed to generate onboarding assessment:", error);
+      toast.error(error?.message || "Failed to generate onboarding assessment.");
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -183,6 +202,12 @@ export function SelfCheckInNotificationPopup({
                 )}
               </div>
             </div>
+          )}
+
+          {isSuccess && notification.user_id && (
+            <Button className="w-full" onClick={handlePrintAssessment}>
+              Print Onboarding Assessment
+            </Button>
           )}
         </div>
       </DialogContent>

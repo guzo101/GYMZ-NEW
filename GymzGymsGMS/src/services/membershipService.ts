@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { subDays } from "date-fns";
+import { format, subDays } from "date-fns";
 
 /**
  * Membership Service
@@ -8,7 +8,8 @@ import { subDays } from "date-fns";
 
 export async function sanitizeMembershipStatuses() {
     const now = new Date();
-    const nowIso = now.toISOString();
+    // IMPORTANT: `renewal_due_date` is a DATE column in Postgres, so filters must use YYYY-MM-DD (not ISO timestamps)
+    const todayStr = format(now, "yyyy-MM-dd");
 
     console.log("🔄 Starting membership status sanitization...");
 
@@ -23,17 +24,17 @@ export async function sanitizeMembershipStatuses() {
             .eq("role", "member")
             .eq("membership_status", "Active")
             .not("renewal_due_date", "is", null)
-            .lt("renewal_due_date", nowIso);
+            .lt("renewal_due_date", todayStr);
 
         if (cleanup1) console.error("Standard cleanup failed:", cleanup1);
         else if (count1) console.log(`✓ Deactivated ${count1} members with expired dates.`);
 
         // 2. Fallback cleanup for members with NULL expiry dates
-        const thirtyDaysAgo = subDays(now, 31).toISOString();
+        const thirtyDaysAgo = format(subDays(now, 31), "yyyy-MM-dd");
         const oneDayAgo = subDays(now, 1).toISOString();
 
         // Day Pass fallback cleanup: anyone who joined before today is now Inactive
-        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+        const startOfToday = todayStr;
         const { count: count2 } = await supabase
             .from("users")
             .update({
@@ -43,7 +44,7 @@ export async function sanitizeMembershipStatuses() {
             .eq("role", "member")
             .eq("membership_status", "Active")
             .is("renewal_due_date", null)
-            .or(`membership_type.ilike.%day%,membership_plan.ilike.%day%`)
+            .or(`membership_type.ilike.%day%`)
             .lt("created_at", startOfToday);
 
         if (count2) console.log(`✓ Deactivated ${count2} members with missing dates (Day Pass fallback).`);
@@ -59,7 +60,6 @@ export async function sanitizeMembershipStatuses() {
             .eq("membership_status", "Active")
             .is("renewal_due_date", null)
             .not("membership_type", "ilike", "%day%")
-            .not("membership_plan", "ilike", "%day%")
             .lt("created_at", thirtyDaysAgo);
 
         if (count3) console.log(`✓ Deactivated ${count3} members with missing dates (Standard fallback).`);

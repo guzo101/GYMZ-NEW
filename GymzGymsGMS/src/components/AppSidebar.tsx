@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Sidebar,
@@ -40,7 +40,7 @@ import {
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/hooks/useAuth";
-import { GymzLogo } from "@/components/GymzLogo";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Collapsible,
   CollapsibleContent,
@@ -48,30 +48,32 @@ import {
 } from "@/components/ui/collapsible";
 import { SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from "@/components/ui/sidebar";
 
+const HELP_WEBSITE_URL = "https://gymz.app/#contact";
+
 const menuItems = [
   // Core operations
   { group: "core", title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-  { group: "core", title: "Members", url: "/members", icon: Users },
-  { group: "core", title: "Deleted Accounts", url: "/admin/deleted-accounts", icon: UserX },
-  { group: "core", title: "Finances", url: "/finances", icon: DollarSign },
-  { group: "core", title: "Check-In & Verification", url: "/admin/checkin", icon: ScanLine },
-  { group: "core", title: "Rooms Management", url: "/admin/rooms", icon: Users },
-  { group: "core", title: "Staff", url: "/staff", icon: UserCheck },
+  { group: "core", title: "Live Gym Check-In", url: "/admin/checkin", icon: ScanLine },
+  { group: "core", title: "Event Check-In", url: "/admin/event-rsvps", icon: CheckCircle2 },
 
   // Growth & communication
-  { group: "growth", title: "Community Chat Room", url: "/notice-board", icon: MessageSquare },
   {
     group: "growth",
-    title: "Events & Sponsors",
+    title: "Other",
     icon: Ticket,
     subItems: [
+      { title: "Members", url: "/members", icon: Users },
+      { title: "Staff", url: "/staff", icon: UserCheck },
+      { title: "Finances", url: "/finances", icon: DollarSign },
+      { title: "Community Chat Room", url: "/notice-board", icon: MessageSquare },
+      { title: "Rooms Management", url: "/admin/rooms", icon: Users },
       { title: "Gym Calendar", url: "/admin/gym-calendar", icon: Calendar },
       { title: "Outdoor CRM", url: "/admin/outdoor-crm", icon: Users },
       { title: "Event Management", url: "/admin/events", icon: Ticket },
-      { title: "Sign-up Management", url: "/admin/event-rsvps", icon: CheckCircle2 },
       { title: "Event Analytics", url: "/admin/event-analytics", icon: BarChart3 },
       { title: "Sponsors & Ads", url: "/admin/sponsors", icon: Award },
       { title: "Sponsor Reports", url: "/admin/sponsor-reports", icon: ClipboardList },
+      { title: "Deleted Accounts", url: "/admin/deleted-accounts", icon: UserX },
     ]
   },
 
@@ -90,8 +92,8 @@ const menuItems = [
   },
   { group: "system", title: "Limited Access", url: "/admin/limited-access", icon: ShieldAlert },
   { group: "system", title: "Support Inquiries", url: "/admin/inquiries", icon: Mail },
-  { group: "system", title: "Platform Admin", url: "/admin/platform", icon: Globe },
   { group: "system", title: "Settings", url: "/settings", icon: Settings },
+  { group: "system", title: "Help", isExternal: true, icon: Globe },
 ];
 
 const staffMenuItems = [
@@ -104,6 +106,7 @@ const staffMenuItems = [
   { title: "Community Chat Room", url: "/staff/notice-board", icon: MessageSquare },
   { title: "Profile", url: "/staff/profile", icon: UserCheck },
   { title: "Settings", url: "/staff/settings", icon: Settings },
+  { title: "Help", isExternal: true, icon: Globe },
 ];
 
 interface AppSidebarProps {
@@ -116,6 +119,31 @@ export function AppSidebar({ className }: AppSidebarProps) {
   const currentPath = location.pathname;
   const collapsed = state === "collapsed";
   const { user } = useAuth();
+  const [gymName, setGymName] = useState<string>("");
+
+  useEffect(() => {
+    async function fetchGymName() {
+      const gymId = user?.gymId;
+      if (!gymId) return;
+
+      try {
+        const { data, error } = await supabase
+          .from("gyms")
+          .select("name")
+          .eq("id", gymId)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (data?.name) {
+          setGymName(data.name);
+        }
+      } catch (err) {
+        console.error("[AppSidebar] Error fetching gym name:", err);
+      }
+    }
+
+    fetchGymName();
+  }, [user?.gymId]);
 
   const isActive = (path: string) => currentPath === path;
   const initials = user?.name
@@ -124,17 +152,30 @@ export function AppSidebar({ className }: AppSidebarProps) {
 
   return (
     <Sidebar className="border-none" collapsible="icon">
-      <div className="flex-1 flex flex-col bg-transparent backdrop-blur-md border-r border-sidebar-border/30 h-full overflow-hidden transition-all duration-300">
+      <div className="flex-1 flex flex-col bg-transparent backdrop-blur-md border-r border-sidebar-border/30 h-full overflow-y-auto overflow-x-hidden transition-all duration-300">
         {/* Logo and Brand */}
         <SidebarHeader className={`border-b border-sidebar-border/50 flex items-center justify-center transition-all ${collapsed ? "p-4" : "p-6"}`}>
           <div className={`flex items-center gap-3 transition-all overflow-hidden justify-center w-full`}>
-            <GymzLogo className={`${collapsed ? "h-10 w-auto" : "h-12 w-auto"} transition-all duration-300 flex-shrink-0`} />
+            {collapsed ? (
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shadow-modern-sm border border-white/10">
+                <span className="text-white font-black text-xl leading-none font-kanit italic">
+                  {gymName ? gymName.charAt(0).toUpperCase() : "G"}
+                </span>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-0.5 select-none pointer-events-none">
+                <span className="text-xl font-black italic tracking-tighter bg-gradient-to-r from-primary via-primary/80 to-primary/60 bg-clip-text text-transparent drop-shadow-sm px-2 text-center font-kanit uppercase">
+                  {gymName || "GYMZ"}
+                </span>
+                <div className="h-0.5 w-10 bg-primary/20 rounded-full mt-0.5 -skew-x-12" />
+              </div>
+            )}
           </div>
         </SidebarHeader>
 
         {/* Navigation Menu */}
         <SidebarContent className="bg-transparent flex-1">
-          <SidebarGroup className={collapsed ? "p-0 py-4" : "p-2"}>
+          <SidebarGroup className={collapsed ? "px-2 py-4" : "p-2"}>
             <SidebarGroupContent>
               <SidebarMenu>
                 {(user?.role === "staff" ? staffMenuItems : menuItems).map((item, index, arr) => {
@@ -149,38 +190,38 @@ export function AppSidebar({ className }: AppSidebarProps) {
                         key={item.title}
                         asChild
                         defaultOpen={item.subItems.some(sub => isActive(sub.url))}
-                        className="group/collapsible"
+                        className="group/collapsible relative z-20 data-[state=open]:z-30"
                       >
-                        <SidebarMenuItem className={`px-2 py-0.5 ${isFirstOfGroup ? "mt-2" : ""}`}>
+                        <SidebarMenuItem className={`flex flex-col items-stretch px-2 py-0.5 relative z-10 ${isFirstOfGroup ? "mt-2" : ""}`}>
                           <CollapsibleTrigger asChild>
                             <SidebarMenuButton
                               tooltip={collapsed ? item.title : undefined}
-                              className={`transition-all duration-200 ${collapsed ? "justify-center !p-0 aspect-square h-9 w-9 rounded-xl" : ""}`}
+                              className={`transition-all duration-200 ${collapsed ? "justify-center !p-0 aspect-square h-9 w-9 rounded-xl" : "!pl-3 !pr-2"} `}
                             >
-                              <div className={`${collapsed ? "justify-center px-0" : "gap-3 px-3"} flex items-center py-2.5 rounded-xl w-full transition-all duration-200 ${isItemActive && collapsed ? "bg-primary text-white" : ""}`}>
+                              <div className={`${collapsed ? "justify-center px-0" : "gap-3 pl-0 pr-3"} flex items-center py-2.5 rounded-xl w-full transition-all duration-200 ${isItemActive && collapsed ? "bg-primary text-white" : ""}`}>
                                 <item.icon className="h-[18px] w-[18px] flex-shrink-0" />
                                 {!collapsed && (
                                   <>
-                                    <span className="truncate text-sm font-medium flex-1 text-left">{item.title}</span>
+                                    <span className="text-sm font-medium flex-1 text-left break-words">{item.title}</span>
                                     <ChevronDown className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
                                   </>
                                 )}
                               </div>
                             </SidebarMenuButton>
                           </CollapsibleTrigger>
-                          <CollapsibleContent>
+                          <CollapsibleContent className="relative z-30 overflow-visible">
                             {!collapsed && (
-                              <SidebarMenuSub className="ml-9 border-l border-sidebar-border/50 mt-1">
+                              <SidebarMenuSub className="ml-4 pl-3 border-l border-sidebar-border/50 mt-0.5 relative z-30 w-full">
                                 {item.subItems.map((subItem) => (
                                   <SidebarMenuSubItem key={subItem.title}>
                                     <SidebarMenuSubButton asChild isActive={isActive(subItem.url)}>
                                       <NavLink
                                         to={subItem.url}
                                         className={({ isActive }) =>
-                                          `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all ${isActive ? "text-primary font-bold" : "text-muted-foreground hover:text-foreground"}`
+                                          `flex items-center gap-2 px-2 py-0.5 rounded text-xs transition-all ${isActive ? "text-primary font-semibold" : "text-muted-foreground hover:text-foreground"}`
                                         }
                                       >
-                                        <subItem.icon className="h-4 w-4" />
+                                        <subItem.icon className="h-3.5 w-3.5 shrink-0" />
                                         <span>{subItem.title}</span>
                                       </NavLink>
                                     </SidebarMenuSubButton>
@@ -194,10 +235,39 @@ export function AppSidebar({ className }: AppSidebarProps) {
                     );
                   }
 
+                  if (item.isExternal) {
+                    return (
+                      <SidebarMenuItem
+                        key={item.title}
+                        className={`flex justify-start px-2 py-0.5 relative z-10 ${isFirstOfGroup ? "mt-2" : ""}`}
+                      >
+                        <SidebarMenuButton
+                          asChild
+                          tooltip={collapsed ? item.title : undefined}
+                          className={`transition-all duration-200 ${collapsed ? "justify-center !p-0 aspect-square h-9 w-9 rounded-xl" : ""}`}
+                        >
+                          <a
+                            href={HELP_WEBSITE_URL}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`${collapsed ? "justify-center px-0" : "gap-3 px-3"} flex items-center py-2.5 rounded-xl w-full transition-all duration-200 text-foreground hover:bg-sidebar-accent hover:translate-x-0.5`}
+                          >
+                            <item.icon className="h-[18px] w-[18px] flex-shrink-0" />
+                            {!collapsed && (
+                              <span className="animate-in fade-in slide-in-from-left-1 duration-300 text-sm font-medium break-words">
+                                {item.title}
+                              </span>
+                            )}
+                          </a>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  }
+
                   return (
                     <SidebarMenuItem
                       key={item.title}
-                      className={`flex justify-center px-2 py-0.5 ${isFirstOfGroup ? "mt-2" : ""}`}
+                      className={`flex justify-start px-2 py-0.5 relative ${isItemActive ? "z-20" : "z-10"} ${isFirstOfGroup ? "mt-2" : ""}`}
                     >
                       <SidebarMenuButton
                         asChild
@@ -205,7 +275,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
                         className={`transition-all duration-200 ${collapsed ? "justify-center !p-0 aspect-square h-9 w-9 rounded-xl" : ""}`}
                       >
                         <NavLink
-                          to={item.url}
+                          to={item.url!}
                           end
                           className={`${collapsed ? "justify-center px-0" : "gap-3 px-3"} flex items-center py-2.5 rounded-xl w-full transition-all duration-200 ${isItemActive
                             ? "bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(var(--primary))] text-white shadow-modern-md font-medium"
@@ -214,7 +284,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
                         >
                           <item.icon className="h-[18px] w-[18px] flex-shrink-0" />
                           {!collapsed && (
-                            <span className="truncate animate-in fade-in slide-in-from-left-1 duration-300 text-sm font-medium">
+                            <span className="animate-in fade-in slide-in-from-left-1 duration-300 text-sm font-medium break-words">
                               {item.title}
                             </span>
                           )}

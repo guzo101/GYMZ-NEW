@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatsCard } from "@/components/StatsCard";
 import { Button } from "@/components/ui/button";
@@ -85,7 +86,10 @@ export default function Events() {
     const [announcementMsg, setAnnouncementMsg] = useState("");
     const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
     const [announcing, setAnnouncing] = useState(false);
+    const [highlightedEventId, setHighlightedEventId] = useState<string | null>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
+    const lastScrolledIdRef = useRef<string | null>(null);
+    const [searchParams, setSearchParams] = useSearchParams();
 
     // datetime-local string pick e.g. "2026-02-21T14:00"
     const [eventDateTime, setEventDateTime] = useState("");
@@ -307,6 +311,31 @@ export default function Events() {
             e.location?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
+    // Handle deep link from search: scroll to event and highlight
+    useEffect(() => {
+        if (loading || events.length === 0) return;
+        const idQ = searchParams.get("id");
+        if (!idQ || lastScrolledIdRef.current === idQ) return;
+        const found = events.find((e) => e.id === idQ);
+        if (found) {
+            lastScrolledIdRef.current = idQ;
+            setHighlightedEventId(idQ);
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    document.querySelector(`[data-event-id="${idQ}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                }, 100);
+            });
+            setTimeout(() => {
+                setHighlightedEventId(null);
+                lastScrolledIdRef.current = null;
+                const np = new URLSearchParams(searchParams);
+                np.delete("id");
+                np.delete("highlight");
+                setSearchParams(np, { replace: true });
+            }, 2000);
+        }
+    }, [loading, events, searchParams]);
+
     return (
         <div className="space-y-6 animate-in fade-in duration-500 max-w-7xl mx-auto">
             {/* Header / Top Panel */}
@@ -408,7 +437,7 @@ export default function Events() {
                                 </TableHeader>
                                 <TableBody>
                                     {filtered.map((event) => (
-                                        <TableRow key={event.id} className="border-b border-sidebar-border/20 hover:bg-sidebar-accent/20 transition-all group">
+                                        <TableRow key={event.id} data-event-id={event.id} className={`border-b border-sidebar-border/20 hover:bg-sidebar-accent/20 transition-all group ${highlightedEventId === event.id ? "bg-primary/10 ring-2 ring-primary ring-inset" : ""}`}>
                                             <TableCell className="px-6 py-5">
                                                 <div className="flex items-center gap-4">
                                                     <div className="h-12 w-20 rounded-xl overflow-hidden flex-shrink-0 bg-sidebar-accent/40 border border-sidebar-border/30 flex items-center justify-center shadow-inner relative group-hover:scale-105 transition-transform">

@@ -8,9 +8,9 @@ export function OfferHighlights() {
   return (
     <section id="pricing" className="space-y-10">
       <SectionHeader
-        eyebrow="Memberships"
-        title="Simple options. Clear pricing. No hidden games."
-        description="Pick the level of coaching you need right now — you can always upgrade once you’re winning."
+        eyebrow="How to deploy"
+        title="Pick the setup that matches your gym"
+        description="Start with one branch or roll out across multiple sites."
       />
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {offerHighlights.map((offer) => (
@@ -32,7 +32,7 @@ export function OfferHighlights() {
                 ))}
               </ul>
               <Button className="mt-auto" variant="secondary">
-                {offer.ctaLabel}
+                Book Demo
               </Button>
             </CardContent>
           </Card>

@@ -10,4 +10,6 @@ release/
 *.exe
 .idea
 .vscode
+# Local junction for Gradle/IDE: GymzApp -> Gymz (create with: mklink /J GymzApp Gymz)
+GymzApp
 *.tgz

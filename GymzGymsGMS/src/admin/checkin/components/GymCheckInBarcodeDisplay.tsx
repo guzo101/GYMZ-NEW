@@ -94,11 +94,8 @@ export function GymCheckInBarcodeDisplay() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <MonitorSmartphone className="h-5 w-5" />
-          Gym Check-in Barcode
+          Live Gym Check-in
         </CardTitle>
-        <CardDescription>
-          Display this QR code at the gym entrance. Members scan it with their app to verify themselves and check in.
-        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {loading ? (

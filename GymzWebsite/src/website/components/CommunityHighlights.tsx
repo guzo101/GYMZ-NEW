@@ -6,9 +6,9 @@ export function CommunityHighlights() {
   return (
     <section id="community" className="space-y-10">
       <SectionHeader
-        eyebrow="Reviews"
-        title="What members actually say"
-        description="Real comments from people who train here. No scripts."
+        eyebrow="Outcomes"
+        title="What Gymz is built to deliver"
+        description="Value we design for—swap in verified client quotes when you have approvals."
       />
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="grid grid-cols-2 gap-4">

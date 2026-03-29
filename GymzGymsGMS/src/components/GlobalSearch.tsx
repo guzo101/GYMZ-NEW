@@ -110,34 +110,40 @@ export function GlobalSearch({
                         .limit(5),
                 ]);
 
+                const isStaff = user?.role === "staff";
+                const membersPath = isStaff ? "/staff/members" : "/members";
+                const staffPath = "/staff";
+                const eventsPath = "/admin/events";
+                const inquiriesPath = "/admin/inquiries";
+
                 setResults({
                     members: (membersRes.data || []).map((m: any) => ({
                         id: m.id,
                         title: m.name || m.email || "Unknown Member",
                         subtitle: `${m.unique_id ? `#${m.unique_id} • ` : ""}${m.email || ""}`,
                         type: "member",
-                        url: `/members?id=${m.id}`,
+                        url: `${membersPath}?id=${m.id}&highlight=1`,
                     })),
                     staff: (staffRes.data || []).map((s: any) => ({
                         id: s.id,
                         title: s.name,
                         subtitle: `${s.role || ""} ${s.department ? `(${s.department})` : ""}`,
                         type: "staff",
-                        url: `/staff?id=${s.id}`,
+                        url: `${staffPath}?id=${s.id}&highlight=1`,
                     })),
                     events: (eventsRes.data || []).map((e: any) => ({
                         id: e.id,
                         title: e.title,
                         subtitle: e.location || "No location",
                         type: "event",
-                        url: `/events?id=${e.id}`,
+                        url: `${eventsPath}?id=${e.id}&highlight=1`,
                     })),
                     inquiries: (inquiriesRes.data || []).map((i: any) => ({
                         id: i.id,
                         title: i.full_name || "Anonymous Inquiry",
                         subtitle: i.email || "No email",
                         type: "inquiry",
-                        url: `/inquiries?id=${i.id}`,
+                        url: `${inquiriesPath}?id=${i.id}&highlight=1`,
                     })),
                 });
             } catch (err) {
@@ -255,7 +261,7 @@ export function GlobalSearch({
                     <CommandSeparator />
 
                     <CommandGroup heading="Quick Actions">
-                        <CommandItem onSelect={() => onSelect("/members")} className="cursor-pointer">
+                        <CommandItem onSelect={() => onSelect(user?.role === "staff" ? "/staff/members" : "/members")} className="cursor-pointer">
                             <UserCheck className="mr-2 h-4 w-4" />
                             <span>Manage All Members</span>
                         </CommandItem>

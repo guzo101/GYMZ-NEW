@@ -98,11 +98,8 @@ export function EventCheckInBarcodeDisplay() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <CalendarCheck className="h-5 w-5" />
-          Event Check-in Barcode
+          Event Check-in
         </CardTitle>
-        <CardDescription>
-          Select an event and display at the venue. Members scan to check in.
-        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {loading ? (
@@ -111,12 +108,11 @@ export function EventCheckInBarcodeDisplay() {
           </div>
         ) : events.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-6">
-            No upcoming events. Create an event to display its check-in barcode.
+            No upcoming events.
           </p>
         ) : (
           <>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Select event</label>
               <Select value={selectedEventId || ""} onValueChange={setSelectedEventId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Choose event" />

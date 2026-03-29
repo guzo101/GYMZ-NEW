@@ -7,6 +7,9 @@ import GymOnboardingWizard from "./pages/GymOnboardingWizard";
 import GymDetailView from "./pages/GymDetailView";
 import VerificationReview from "./pages/VerificationReview";
 import AuditLogViewer from "./pages/AuditLogViewer";
+import TokenAnalytics from "./pages/TokenAnalytics";
+import TokenAnalyticsGymDetail from "./pages/TokenAnalyticsGymDetail";
+import TokenAnalyticsUserDetail from "./pages/TokenAnalyticsUserDetail";
 import Login from "./pages/Login";
 
 // Setup basic protected route (Platform Admin Only)
@@ -69,6 +72,9 @@ function App() {
           <Route path="/gym/:gymId" element={<ProtectedRoute><GymDetailView /></ProtectedRoute>} />
           <Route path="/verify/:gymId" element={<ProtectedRoute><VerificationReview /></ProtectedRoute>} />
           <Route path="/audit-logs" element={<ProtectedRoute><AuditLogViewer /></ProtectedRoute>} />
+          <Route path="/token-analytics" element={<ProtectedRoute><TokenAnalytics /></ProtectedRoute>} />
+          <Route path="/token-analytics/gym/:gymId" element={<ProtectedRoute><TokenAnalyticsGymDetail /></ProtectedRoute>} />
+          <Route path="/token-analytics/user/:userId" element={<ProtectedRoute><TokenAnalyticsUserDetail /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

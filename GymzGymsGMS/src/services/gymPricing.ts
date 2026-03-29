@@ -71,7 +71,7 @@ const isPlanVisibleForPath = (
   planScope: "gym_access" | "event_access" | "both",
   selectedPath?: AccessModeScope | null
 ) => {
-  if (!selectedPath) return false;
+  if (!selectedPath) return true;
   return planScope === "both" || planScope === selectedPath;
 };
 

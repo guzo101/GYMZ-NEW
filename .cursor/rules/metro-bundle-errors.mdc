@@ -1,0 +1,30 @@
+---
+description: How to debug Metro 500 bundle errors and MIME-type JSON responses in the Gymz app
+alwaysApply: true
+---
+
+# Metro 500 bundle errors (JSON instead of JS)
+
+When the web bundle URL (for example `index.ts.bundle?platform=web&...`) returns **500** and the browser says the script was blocked because its MIME type is `application/json`:
+
+- **Always treat this as a Metro build failure**, not a browser bug.
+- **First step**: open the failing bundle URL in the browser (or check the Metro terminal). Read the JSON error body to see the exact file, line, and message.
+- **Never guess**; fix only based on that concrete error.
+
+## Common pattern in this project
+
+For files under `Gymz/components/**` that import from app-root folders like `contexts/`, always double‑check the **relative path depth**:
+
+- From `Gymz/components/coachBubble/*` to `Gymz/contexts/CoachCharacterContext.tsx` use:
+  - `../../contexts/CoachCharacterContext`
+- From `Gymz/components/nutrition/FoodScanner.tsx` to the same context use:
+  - `../../contexts/CoachCharacterContext`
+
+If you see a Metro error like "Unable to resolve module `../contexts/CoachCharacterContext`", fix the path rather than changing the module.
+
+## Required debugging discipline
+
+- **Do not ignore** the Metro JSON error payload; it is the source of truth.
+- **Do not assume** which file is broken; follow the stack/file path from the error.
+- After each fix, **restart or reload Metro** and confirm the bundle URL now returns JavaScript, not JSON.
+

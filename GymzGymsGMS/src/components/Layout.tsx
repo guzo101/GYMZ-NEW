@@ -16,7 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { notifyPaymentApproved, notifyPaymentRejected } from "@/lib/notifications";
 import { useNotifications } from "@/hooks/useNotifications";
 import { GlobalSearch } from "./GlobalSearch";
-import { GymzLogo } from "./GymzLogo";
+import { runMonthlyReportIfDue } from "@/services/monthlyReportService";
 
 export function Layout() {
   const { user, logout } = useAuth();
@@ -82,6 +82,20 @@ export function Layout() {
     }
     fetchGymName();
   }, [user?.gymId]);
+
+  // Automatic monthly report: run on 1st of month (before noon) for admin users
+  useEffect(() => {
+    if (!user || (user.role !== "admin" && user.role !== "super_admin")) return;
+    let cancelled = false;
+    runMonthlyReportIfDue(user, undefined, (success) => {
+      if (!cancelled && success) {
+        toast({ title: "Monthly Report Ready", description: "Previous month's reports have been downloaded." });
+      } else if (!cancelled && success === false) {
+        toast({ title: "Report Failed", description: "Could not generate monthly report.", variant: "destructive" });
+      }
+    });
+    return () => { cancelled = true; };
+  }, [user?.id, user?.role]);
 
   useEffect(() => {
     function handleDocClick(event) {
@@ -409,7 +423,7 @@ export function Layout() {
 
   return (
     <SidebarProvider defaultOpen={true}>
-      <div className="flex min-h-screen w-full relative transition-colors duration-500 overflow-hidden">
+      <div className="flex min-h-screen w-full relative transition-colors duration-500">
         {/* Fixed Aurora Backdrop - GLOBAL LEVEL */}
         <div className="fixed inset-0 z-0 pointer-events-none select-none overflow-hidden bg-mesh-glow">
           <div className="absolute top-[-10%] right-[-10%] w-[65vw] h-[65vw] rounded-full bg-primary/20 blur-[130px] opacity-60 animate-pulse" />
@@ -420,28 +434,13 @@ export function Layout() {
         <AppSidebar />
 
         {/* Content Area - FIXED LAYOUT DEPTH */}
-        <div className="flex-1 flex flex-col relative z-10 bg-transparent min-w-0 min-h-screen">
+        <div className="flex-1 flex flex-col relative z-[1] bg-transparent min-w-0 min-h-screen">
           {/* Header */}
           <header className="h-16 border-b border-border/40 bg-card/40 backdrop-blur-xl px-4 md:px-6 flex items-center justify-between flex-shrink-0 z-40 transition-all duration-300">
             <div className="flex items-center gap-2 md:gap-4 min-w-0 flex-1">
               <SidebarTrigger className="h-9 w-9 flex-shrink-0 hover:bg-muted/50 transition-all duration-300 rounded-xl text-muted-foreground hover:text-primary active:scale-95" />
-              <button
-                type="button"
-                onClick={() => navigate(user?.role === "staff" ? "/staff/dashboard" : "/dashboard")}
-                className="hidden sm:flex items-center flex-shrink-0 h-9"
-                aria-label="Gymz Home"
-              >
-                <GymzLogo className="h-8 w-auto" />
-              </button>
-              {gymName && (
-                <div className="flex items-center">
-                  <Badge variant="outline" className="px-2 md:px-3 py-1 font-semibold text-primary border-primary/30 bg-primary/5 shadow-sm flex-shrink-0 shrink">
-                    <Building2 className="w-3.5 h-3.5 mr-1 md:mr-1.5 inline-block" />
-                    <span className="truncate max-w-[80px] sm:max-w-[120px] lg:max-w-none">{gymName}</span>
-                  </Badge>
-                </div>
-              )}
-              <div className="hidden lg:flex relative flex-1 max-w-xs min-w-0">
+
+              <div className="hidden lg:flex relative flex-1 min-w-0">
                 <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4 z-10" />
                 <Input
                   id="header-search-input"
@@ -485,7 +484,7 @@ export function Layout() {
                       </Badge>
                     )}
                   </button>
-                    {bellOpen && (
+                  {bellOpen && (
                     <div className="absolute right-0 mt-2 w-[360px] max-w-[90vw] bg-card border border-border/50 rounded-xl shadow-xl z-[100] animate-in fade-in slide-in-from-top-2 max-h-[70vh] overflow-hidden flex flex-col backdrop-blur-md">
                       <div className="px-5 py-4 border-b border-border/50 bg-muted/30 sticky top-0 z-10 space-y-3">
                         <div className="flex items-center justify-between">
@@ -515,31 +514,31 @@ export function Layout() {
                             return true;
                           });
                           return filtered.length === 0 ? <p className="text-center py-8 text-sm text-muted-foreground">No notifications</p> :
-                          filtered.map((n) => (
-                            <div
-                              key={n.id}
-                              role="button"
-                              tabIndex={0}
-                              onClick={(e) => handleNotificationClick(n, e)}
-                              onPointerDown={(e) => e.stopPropagation()}
-                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleNotificationClick(n); } }}
-                              title={['payment', 'payment_pending'].includes(n.type) ? 'Click to verify · Double-click to view payment' : 'Click to open · Double-click to view details'}
-                              className={`py-2 px-2.5 rounded-md border-l-[3px] cursor-pointer hover:bg-muted/50 transition-all active:scale-[0.98] select-none ${getNotificationColor(n)}`}
-                            >
-                              <div className="flex gap-2 items-start">
-                                <span className="flex-shrink-0 mt-0.5">{getNotificationIcon(n)}</span>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-medium line-clamp-2 leading-tight text-foreground">{n.message}</p>
-                                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                    <p className="text-[10px] text-muted-foreground">{formatDistanceToNow(new Date(n.created_at))} ago</p>
-                                    {n.is_backfilled && (
-                                      <span className="text-[10px] text-muted-foreground">Backfilled</span>
-                                    )}
+                            filtered.map((n) => (
+                              <div
+                                key={n.id}
+                                role="button"
+                                tabIndex={0}
+                                onClick={(e) => handleNotificationClick(n, e)}
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleNotificationClick(n); } }}
+                                title={['payment', 'payment_pending'].includes(n.type) ? 'Click to verify · Double-click to view payment' : 'Click to open · Double-click to view details'}
+                                className={`py-2 px-2.5 rounded-md border-l-[3px] cursor-pointer hover:bg-muted/50 transition-all active:scale-[0.98] select-none ${getNotificationColor(n)}`}
+                              >
+                                <div className="flex gap-2 items-start">
+                                  <span className="flex-shrink-0 mt-0.5">{getNotificationIcon(n)}</span>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-medium line-clamp-2 leading-tight text-foreground">{n.message}</p>
+                                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                      <p className="text-[10px] text-muted-foreground">{formatDistanceToNow(new Date(n.created_at))} ago</p>
+                                      {n.is_backfilled && (
+                                        <span className="text-[10px] text-muted-foreground">Backfilled</span>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               </div>
-                            </div>
-                          ));
+                            ));
                         })()}
                       </div>
                     </div>

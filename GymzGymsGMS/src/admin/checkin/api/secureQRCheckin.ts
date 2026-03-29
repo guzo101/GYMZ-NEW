@@ -61,7 +61,7 @@ export async function verifySecureQRCheckIn(identifier: string): Promise<CheckIn
 
     const photoUrl = userData?.face_photo_url || userData?.avatar_url || null;
     const fullName = userData?.name || "Unknown";
-    const membershipPlan = userData?.membership_type || userData?.membership_plan || null;
+    const membershipPlan = userData?.membership_type || null;
     const expiryDate = userData?.renewal_due_date || null;
 
     // Calculate days left

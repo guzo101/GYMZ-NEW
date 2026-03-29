@@ -1,0 +1,48 @@
+workflows:
+  ios-simulator-preview:
+    name: iOS Simulator preview
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      node: 22.14.0
+      xcode: latest
+    scripts:
+      - name: Install deps, prebuild, pods, unsigned simulator build
+        script: |
+          set -e
+          APP_DIR="$CM_BUILD_DIR/Gymz"
+          test -d "$APP_DIR" || { echo "ERROR: Gymz/ not found"; exit 1; }
+          cd "$APP_DIR"
+          npm ci
+          if [ ! -d ios ]; then
+            npx expo prebuild --platform ios --no-install
+          fi
+          if [ ! -d ios ]; then
+            echo "ERROR: ios/ missing"
+            exit 1
+          fi
+          cd ios
+          pod install
+          WS=$(find . -maxdepth 1 -name "*.xcworkspace" | head -1)
+          test -n "$WS"
+          WS_ABS="$APP_DIR/ios/$(basename "$WS")"
+          SCHEME=""
+          if command -v jq >/dev/null 2>&1; then
+            JSON=$(xcodebuild -list -json -workspace "$WS_ABS" 2>/dev/null) || true
+            test -n "$JSON" && SCHEME=$(echo "$JSON" | jq -r '.workspace.schemes[]? | select(startswith("Pods-") | not)' | head -1) || true
+          fi
+          if [ -z "$SCHEME" ] || [ "$SCHEME" = "null" ]; then
+            SCHEME=$(cd "$APP_DIR" && node -p "require('./app.config.js').expo.name")
+          fi
+          test -n "$SCHEME"
+          xcodebuild build \
+            -workspace "$WS_ABS" \
+            -scheme "$SCHEME" \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+    artifacts:
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app

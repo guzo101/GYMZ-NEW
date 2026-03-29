@@ -180,7 +180,7 @@ export async function verifyUserCheckIn(identifier: string): Promise<CheckInResu
         user: {
           photoUrl,
           fullName: user.name || "Unknown",
-          membershipPlan: user.membership_type || user.membership_plan || null,
+          membershipPlan: user.membership_type || null,
           expiryDate: expiryDate || null,
           daysLeft: 0,
           overdueDays: 0,
@@ -203,7 +203,7 @@ export async function verifyUserCheckIn(identifier: string): Promise<CheckInResu
           user: {
             photoUrl,
             fullName: user.name || "Unknown",
-            membershipPlan: user.membership_type || user.membership_plan || null,
+            membershipPlan: user.membership_type || null,
             expiryDate: membershipExpiry,
             daysLeft: 0,
             overdueDays: 0,
@@ -212,7 +212,7 @@ export async function verifyUserCheckIn(identifier: string): Promise<CheckInResu
       }
 
       // For daily subscriptions, verify QR code expires at end of day or before
-      const membershipType = (user.membership_type || user.membership_plan || "").toLowerCase();
+      const membershipType = (user.membership_type || "").toLowerCase();
       const isDailySubscription =
         membershipType.includes("daily") ||
         membershipType.includes("day pass") ||
@@ -233,7 +233,7 @@ export async function verifyUserCheckIn(identifier: string): Promise<CheckInResu
             user: {
               photoUrl,
               fullName: user.name || "Unknown",
-              membershipPlan: user.membership_type || user.membership_plan || null,
+              membershipPlan: user.membership_type || null,
               expiryDate: membershipExpiry,
               daysLeft: 0,
               overdueDays: 0,
@@ -532,7 +532,7 @@ export async function verifyUserCheckIn(identifier: string): Promise<CheckInResu
       user: {
         photoUrl,
         fullName: user.name || "Unknown",
-        membershipPlan: user.membership_type || user.membership_plan || null,
+        membershipPlan: user.membership_type || null,
         expiryDate: expiryDate || null,
         daysLeft: 0,
         overdueDays,
@@ -551,7 +551,7 @@ export async function verifyUserCheckIn(identifier: string): Promise<CheckInResu
       user: {
         photoUrl,
         fullName: user.name || "Unknown",
-        membershipPlan: user.membership_type || user.membership_plan || null,
+        membershipPlan: user.membership_type || null,
         expiryDate: expiryDate || null,
         daysLeft: 0,
         overdueDays,
@@ -570,7 +570,7 @@ export async function verifyUserCheckIn(identifier: string): Promise<CheckInResu
       user: {
         photoUrl,
         fullName: user.name || "Unknown",
-        membershipPlan: user.membership_type || user.membership_plan || null,
+        membershipPlan: user.membership_type || null,
         expiryDate: expiryDate || null,
         daysLeft,
         overdueDays,
@@ -589,7 +589,7 @@ export async function verifyUserCheckIn(identifier: string): Promise<CheckInResu
       user: {
         photoUrl,
         fullName: user.name || "Unknown",
-        membershipPlan: user.membership_type || user.membership_plan || null,
+        membershipPlan: user.membership_type || null,
         expiryDate: expiryDate || null,
         daysLeft: 0,
         overdueDays,
@@ -608,7 +608,7 @@ export async function verifyUserCheckIn(identifier: string): Promise<CheckInResu
       user: {
         photoUrl,
         fullName: user.name || "Unknown",
-        membershipPlan: user.membership_type || user.membership_plan || null,
+        membershipPlan: user.membership_type || null,
         expiryDate: expiryDate || null,
         daysLeft,
         overdueDays,
@@ -663,7 +663,7 @@ export async function verifyUserCheckIn(identifier: string): Promise<CheckInResu
         user: {
           photoUrl,
           fullName: user.name || "Unknown",
-          membershipPlan: user.membership_type || user.membership_plan || null,
+          membershipPlan: user.membership_type || null,
           expiryDate: null, // No expiry date if never paid
           daysLeft: 0,
           overdueDays: 0,
@@ -686,7 +686,7 @@ export async function verifyUserCheckIn(identifier: string): Promise<CheckInResu
       user: {
         photoUrl,
         fullName: user.name || "Unknown",
-        membershipPlan: user.membership_type || user.membership_plan || null,
+        membershipPlan: user.membership_type || null,
         expiryDate: expiryDate || null,
         daysLeft: daysLeft > 0 ? daysLeft : 0,
         overdueDays,
@@ -710,7 +710,7 @@ export async function verifyUserCheckIn(identifier: string): Promise<CheckInResu
       user: {
         photoUrl,
         fullName: user.name || "Unknown",
-        membershipPlan: user.membership_type || user.membership_plan || null,
+        membershipPlan: user.membership_type || null,
         expiryDate: expiryDate || null,
         daysLeft: 0,
         overdueDays,
@@ -754,7 +754,7 @@ export async function verifyUserCheckIn(identifier: string): Promise<CheckInResu
       user: {
         photoUrl,
         fullName: user.name || "Unknown",
-        membershipPlan: user.membership_type || user.membership_plan || null,
+        membershipPlan: user.membership_type || null,
         expiryDate: expiryDate || null,
         daysLeft: 0,
         overdueDays,
@@ -791,7 +791,7 @@ export async function verifyUserCheckIn(identifier: string): Promise<CheckInResu
       user: {
         photoUrl,
         fullName: user.name || "Unknown",
-        membershipPlan: user.membership_type || user.membership_plan || null,
+        membershipPlan: user.membership_type || null,
         expiryDate: expiryDate || null,
         daysLeft: 0,
         overdueDays,
@@ -814,7 +814,7 @@ export async function verifyUserCheckIn(identifier: string): Promise<CheckInResu
       user: {
         photoUrl,
         fullName: user.name || "Unknown",
-        membershipPlan: user.membership_type || user.membership_plan || null,
+        membershipPlan: user.membership_type || null,
         expiryDate: expiryDate || null,
         daysLeft: daysLeft > 0 ? daysLeft : 0,
         overdueDays,
@@ -842,7 +842,7 @@ export async function verifyUserCheckIn(identifier: string): Promise<CheckInResu
       user: {
         photoUrl,
         fullName: user.name || "Unknown",
-        membershipPlan: user.membership_type || user.membership_plan || null,
+        membershipPlan: user.membership_type || null,
         expiryDate: expiryDate || null,
         daysLeft: 0,
         overdueDays,
@@ -875,7 +875,7 @@ export async function verifyUserCheckIn(identifier: string): Promise<CheckInResu
       user: {
         photoUrl,
         fullName: user.name || "Unknown",
-        membershipPlan: user.membership_type || user.membership_plan || null,
+        membershipPlan: user.membership_type || null,
         expiryDate: expiryDate || null,
         daysLeft,
         overdueDays,
@@ -910,7 +910,8 @@ export async function verifyUserCheckIn(identifier: string): Promise<CheckInResu
         .from("attendance_logs")
         .insert({
           user_id: user.id,
-          membership_type: user.membership_type || user.membership_plan || "Member",
+          gym_id: user.gym_id,
+          membership_type: user.membership_type || "Member",
           status: "approved",
         });
 
@@ -934,7 +935,7 @@ export async function verifyUserCheckIn(identifier: string): Promise<CheckInResu
     user: {
       photoUrl,
       fullName: user.name || "Unknown",
-      membershipPlan: user.membership_type || user.membership_plan || null,
+      membershipPlan: user.membership_type || null,
       expiryDate: expiryDate || null,
       daysLeft,
       overdueDays,

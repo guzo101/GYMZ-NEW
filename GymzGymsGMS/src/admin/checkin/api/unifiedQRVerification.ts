@@ -137,7 +137,7 @@ export async function verifyMemberQRUnified(identifier: string): Promise<CheckIn
       user: {
         photoUrl: userData?.face_photo_url || userData?.avatar_url || null,
         fullName: userData?.name || "Unknown",
-        membershipPlan: userData?.membership_type || userData?.membership_plan || null,
+        membershipPlan: userData?.membership_type || null,
         expiryDate: userData?.renewal_due_date || null,
         daysLeft: 0,
         overdueDays: 0,
@@ -184,7 +184,7 @@ export async function verifyMemberQRUnified(identifier: string): Promise<CheckIn
   const { data: userData } = await supabase.from("users").select("*").eq("id", qrData.user_id).single();
   const photoUrl = userData?.face_photo_url || userData?.avatar_url || null;
   const fullName = userData?.name || "Unknown";
-  const membershipPlan = userData?.membership_type || userData?.membership_plan || null;
+  const membershipPlan = userData?.membership_type || null;
   const expiryDate = userData?.renewal_due_date || null;
   let daysLeft = 0;
   let overdueDays = 0;

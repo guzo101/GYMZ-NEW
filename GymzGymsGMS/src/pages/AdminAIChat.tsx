@@ -29,7 +29,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   getOrCreateThreadId,
   getOrCreateChatId,
-  sendToMakeAI,
+  sendMessageToAI,
   storeMessage,
   fetchConversations,
   generateChatId,
@@ -226,8 +226,8 @@ export default function AdminAIChat() {
         adminMessage
       );
 
-      // Send to Make.ai and get response
-      const response = await sendToMakeAI(
+      // Send to AI (Make or OpenAI per settings); token limits and logging applied
+      const response = await sendMessageToAI(
         "admin",
         selectedUserId,
         threadId,

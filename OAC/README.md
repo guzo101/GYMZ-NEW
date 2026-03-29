@@ -1,4 +1,20 @@
-# React + TypeScript + Vite
+# Gymz OAC — Owner Admin Console
+
+React + TypeScript + Vite app for the Gymz platform admin (gyms, token analytics, onboarding).
+
+## Installable desktop app (Windows)
+
+OAC can be built as a desktop app with Electron and an NSIS installer.
+
+- **Run in dev (desktop):**  
+  `npm run electron:dev` — starts Vite on port 8085 and opens the Electron window.
+
+- **Build installer:**  
+  `npm run electron:build` — builds the web app, copies icons, and produces the installer in `release/`.
+
+Icons are copied from `../GymzGymsGMS/build/` (icon.ico, icon.png) by `npm run copy-icon`. If that folder is missing, add `icon.ico` and `icon.png` to `OAC/build/` before running `electron:dev` or `electron:build`.
+
+---
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

@@ -96,13 +96,13 @@ export default function SentNotifications() {
   const [members, setMembers] = useState<GymMember[]>([]);
   const [testPushMemberId, setTestPushMemberId] = useState<string>("");
   const [testPushManualUserId, setTestPushManualUserId] = useState<string>("");
-  const [testPushTitle, setTestPushTitle] = useState("Test from GMS");
+  const [testPushTitle, setTestPushTitle] = useState("Admin");
   const [testPushBody, setTestPushBody] = useState("This is a test push notification.");
   const [sendingPush, setSendingPush] = useState(false);
 
   const [testInAppMemberId, setTestInAppMemberId] = useState<string>("");
   const [testInAppManualUserId, setTestInAppManualUserId] = useState<string>("");
-  const [testInAppTitle, setTestInAppTitle] = useState("Test from GMS");
+  const [testInAppTitle, setTestInAppTitle] = useState("Admin");
   const [testInAppMessage, setTestInAppMessage] = useState("This is a test in-app notification from GMS.");
   const [testInAppActionUrl, setTestInAppActionUrl] = useState("Main");
   const [testInAppImageUrl, setTestInAppImageUrl] = useState("");
@@ -277,7 +277,7 @@ export default function SentNotifications() {
 
       const selectedEvent = testInAppEventId ? events.find((e) => e.id === testInAppEventId) : null;
       const imageUrl = selectedEvent?.image_url || testInAppImageUrl.trim() || undefined;
-      const title = selectedEvent ? (testInAppOverlayText.trim() || selectedEvent.title) : (testInAppTitle.trim() || "Test from GMS");
+      const title = selectedEvent ? (testInAppOverlayText.trim() || selectedEvent.title) : (testInAppTitle.trim() || "Admin");
       const message = selectedEvent
         ? (testInAppMessage.trim() || `${selectedEvent.title} – ${new Date(selectedEvent.event_date).toLocaleDateString()}`)
         : testInAppMessage.trim();
@@ -290,6 +290,9 @@ export default function SentNotifications() {
         type: selectedEvent ? "event_announcement" : "admin_message",
         message,
         title,
+        sender_id: user?.id ?? undefined,
+        sender_type: "admin",
+        sender_name: user?.name || user?.email || "Admin",
         priority: 3,
         is_read: false,
         status: "unread",
@@ -302,7 +305,7 @@ export default function SentNotifications() {
 
         if (testInAppAlsoPush) {
         const { data: pushData, error: pushError } = await supabase.functions.invoke("send-push-to-user", {
-          body: { user_id: userId, title: testInAppTitle.trim() || "Test from GMS", body: testInAppMessage.trim().substring(0, 200) },
+          body: { user_id: userId, title: testInAppTitle.trim() || "Admin", body: testInAppMessage.trim().substring(0, 200) },
         });
         if (pushError) {
           toast.success("In-app sent. Push failed (member may not have app/token).");

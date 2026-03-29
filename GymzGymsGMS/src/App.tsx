@@ -42,8 +42,10 @@ import EventRSVPManagement from "./pages/admin/EventRSVPManagement";
 import OutdoorCRM from "./pages/admin/OutdoorCRM";
 import Sponsors from "./pages/admin/Sponsors";
 import SponsorReports from "./pages/admin/SponsorReports";
-import PlatformAdmin from "./pages/admin/PlatformAdmin";
 import DeletedAccounts from "./pages/DeletedAccounts";
+import { DeepLinkHandler } from "./components/DeepLinkHandler";
+import OACLayout from "./layouts/OACLayout";
+import WebsiteTrafficOAC from "./pages/oac/WebsiteTrafficOAC";
 
 const queryClient = new QueryClient();
 
@@ -69,7 +71,15 @@ function PrivateRoute({
   );
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    const fallback = user.role === "member" ? "/member/dashboard" : user.role === "staff" ? "/staff/profile" : "/dashboard";
+    if (user.role === "platform_admin") {
+      return <Navigate to="/oac/website-traffic" replace />;
+    }
+    const fallback =
+      user.role === "member"
+        ? "/member/dashboard"
+        : user.role === "staff"
+          ? "/staff/profile"
+          : "/dashboard";
     return <Navigate to={fallback} replace />;
   }
   return <>{children}</>;
@@ -83,15 +93,39 @@ function AuthRedirect() {
   return null;
 }
 
+/** Entry route "/": send authenticated users to app, unauthenticated to login. No blank flash. */
+function EntryRoute() {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+  if (user) {
+    if (user.role === "platform_admin") return <Navigate to="/oac/website-traffic" replace />;
+    if (user.role === "admin" || user.role === "super_admin") return <Navigate to="/dashboard" replace />;
+    if (user.role === "staff") return <Navigate to="/staff/profile" replace />;
+    if (user.role === "member") return <Navigate to="/member/dashboard" replace />;
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <Navigate to="/login" replace />;
+}
+
 const App = () => (
   <AuthProvider>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <Router>
+        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          {(window as any).electronAPI?.isElectron && <DeepLinkHandler />}
           <Routes>
-            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/" element={<EntryRoute />} />
             <Route
               path="/login"
               element={<Login />}
@@ -100,14 +134,25 @@ const App = () => (
             <Route path="/auth/email-confirmed" element={<EmailConfirmation />} />
             <Route path="/invite-complete" element={<InviteComplete />} />
 
-            {/* Admin routes */}
             <Route
               element={
-                <PrivateRoute allowedRoles={["admin"]}>
+                <PrivateRoute allowedRoles={["platform_admin", "super_admin"]}>
+                  <OACLayout />
+                </PrivateRoute>
+              }
+            >
+              <Route path="/oac" element={<Navigate to="/oac/website-traffic" replace />} />
+              <Route path="/oac/website-traffic" element={<WebsiteTrafficOAC />} />
+            </Route>
+
+            <Route
+              element={
+                <PrivateRoute allowedRoles={["admin", "super_admin"]}>
                   <Layout />
                 </PrivateRoute>
               }
             >
+              <Route path="/admin" element={<Navigate to="/admin/checkin" replace />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/members" element={<Members />} />
               <Route path="/admin/deleted-accounts" element={<DeletedAccounts />} />
@@ -128,11 +173,6 @@ const App = () => (
               <Route path="/admin/outdoor-crm" element={<OutdoorCRM />} />
               <Route path="/admin/sponsors" element={<Sponsors />} />
               <Route path="/admin/sponsor-reports" element={<SponsorReports />} />
-              <Route path="/admin/platform" element={
-                <PrivateRoute allowedRoles={["platform_admin"]}>
-                  <PlatformAdmin />
-                </PrivateRoute>
-              } />
               <Route path="/notice-board" element={<NoticeBoard />} />
               <Route path="/staff" element={<Staff />} />
               <Route path="/staff/profile" element={<StaffProfile />} />

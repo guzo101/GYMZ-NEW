@@ -95,6 +95,9 @@ export default {
 			},
 			fontFamily: {
 				sans: ["Inter", "system-ui", "-apple-system", "BlinkMacSystemFont", '"Segoe UI"', "Roboto", "sans-serif"],
+				outfit: ["Outfit", "sans-serif"],
+				kanit: ["Kanit", "sans-serif"],
+				syne: ["Syne", "sans-serif"],
 			},
 		}
 	},

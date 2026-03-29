@@ -1,27 +1,26 @@
-import { Button } from "@/components/ui/button";
-import { ArrowRight, Zap, Users, TrendingUp } from "lucide-react";
+import { Zap, Users, TrendingUp } from "lucide-react";
 
 const features = [
   {
     icon: Zap,
-    title: "Structured Programs",
-    description: "Daily planned workouts. Just show up.",
-    stat: "12.4 sessions/month",
-    statLabel: "average attendance",
+    title: "Grow revenue faster",
+    description: "Catch missed renewals and overdue accounts early.",
+    stat: "Revenue focus",
+    statLabel: "every day",
   },
   {
     icon: Users,
-    title: "Expert Coaching",
-    description: "Hands-on coaching in every session.",
-    stat: "1:8 ratio",
-    statLabel: "trainer to member",
+    title: "Serve members better",
+    description: "Give your team one live view for faster follow-up.",
+    stat: "Better service",
+    statLabel: "less admin",
   },
   {
     icon: TrendingUp,
-    title: "Measurable Progress",
-    description: "Trackable progress. Results in 30 days.",
-    stat: "18+ months",
-    statLabel: "average retention",
+    title: "Scale with confidence",
+    description: "Keep service quality consistent as you grow.",
+    stat: "Cleaner operations",
+    statLabel: "across locations",
   },
 ];
 
@@ -30,9 +29,10 @@ export function KeyFeaturesSection() {
     <section id="about" className="bg-gradient-to-br from-white via-primary/20 to-white py-20 px-6">
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-16">
-          <h2 className="text-4xl md:text-5xl font-black mb-4">
-            What You Get
-          </h2>
+          <h2 className="text-4xl md:text-5xl font-black mb-4">Why owners choose Gymz</h2>
+          <p className="text-muted-foreground max-w-2xl mx-auto">
+            More revenue, better client service, and scalable operations.
+          </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">

@@ -53,6 +53,7 @@ import { StatsCard } from "@/components/StatsCard";
 import { QRScanner } from "@/admin/checkin/components/QRScanner";
 import { verifyEventRSVP } from "@/admin/checkin/api/eventCheckIn";
 import { DataMapper } from "@/utils/dataMapper";
+import { useAudioFeedback } from "@/hooks/useAudioFeedback";
 
 interface GymEvent {
     id: string;
@@ -106,6 +107,8 @@ export default function EventRSVPManagement() {
         status: "approved" | "rejected" | "verifying";
         message: string;
     } | null>(null);
+
+    const { playSuccess, playError } = useAudioFeedback();
 
     useEffect(() => {
         if (user?.gymId) fetchEvents();
@@ -195,8 +198,10 @@ export default function EventRSVPManagement() {
                 .eq("id", rsvpId);
             if (error) throw error;
             toast.success(current ? "Check-in removed" : "Member checked in ✓");
+            if (!current) playSuccess();
             fetchRSVPs(selectedEventId);
         } catch (err: any) {
+            playError();
             toast.error("Failed: " + err.message);
         } finally {
             setProcessing(null);
@@ -234,12 +239,15 @@ export default function EventRSVPManagement() {
             });
 
             if (result.status === "approved") {
+                playSuccess();
                 toast.success(result.message);
                 fetchRSVPs(selectedEventId);
             } else {
+                playError();
                 toast.error(result.message);
             }
         } catch (err: any) {
+            playError();
             setScanStatus({ status: "rejected", message: err.message });
             toast.error("Scan error: " + err.message);
         } finally {

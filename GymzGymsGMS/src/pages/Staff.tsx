@@ -1,5 +1,6 @@
 /* @ts-nocheck */
-import { useEffect, useMemo, useState, Component } from "react";
+import { useEffect, useMemo, useState, Component, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatsCard } from "@/components/StatsCard";
 import { Button } from "@/components/ui/button";
@@ -68,6 +69,7 @@ interface StaffRecord {
 interface RoleAuditRecord {
   id: string;
   createdAt: string;
+  actorName: string | null;
   actorEmail: string | null;
   entityId: string | null;
   oldRole: string | null;
@@ -114,6 +116,9 @@ function StaffInner() {
   const [searchTerm, setSearchTerm] = useState("");
   const [staff, setStaff] = useState<StaffRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [highlightedStaffId, setHighlightedStaffId] = useState<string | null>(null);
+  const lastScrolledIdRef = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Add staff dialog state
@@ -174,6 +179,32 @@ function StaffInner() {
     };
   }, [user?.gymId, user?.role]);
 
+  // Handle deep link from search: scroll to staff and highlight
+  useEffect(() => {
+    if (loading || staff.length === 0) return;
+    const idQ = searchParams.get("id");
+    if (!idQ || lastScrolledIdRef.current === idQ) return;
+    const found = staff.find((s) => s.id === idQ || s.userId === idQ);
+    if (found) {
+      lastScrolledIdRef.current = idQ;
+      setHighlightedStaffId(found.id);
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          const el = document.querySelector(`[data-staff-id="${found.id}"]`) || document.querySelector(`[data-staff-id="${idQ}"]`);
+          el?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 100);
+      });
+      setTimeout(() => {
+        setHighlightedStaffId(null);
+        lastScrolledIdRef.current = null;
+        const np = new URLSearchParams(searchParams);
+        np.delete("id");
+        np.delete("highlight");
+        setSearchParams(np, { replace: true });
+      }, 2000);
+    }
+  }, [loading, staff, searchParams]);
+
   async function fetchStaff() {
     if (!user?.gymId) {
       setStaff([]);
@@ -204,7 +235,7 @@ function StaffInner() {
     try {
       const { data, error: fetchErr } = await db
         .from("admin_audit_logs")
-        .select("id, created_at, actor_email, entity_id, old_value, new_value, reason")
+        .select("id, created_at, actor_id, actor_email, entity_id, old_value, new_value, reason, actor:users!actor_id(name, email)")
         .eq("action", "role_change")
         .eq("entity_type", "users")
         .eq("gym_id", user.gymId)
@@ -216,7 +247,8 @@ function StaffInner() {
       const mapped: RoleAuditRecord[] = (data ?? []).map((row: any) => ({
         id: row.id,
         createdAt: row.created_at,
-        actorEmail: row.actor_email ?? null,
+        actorName: row.actor?.name ?? null,
+        actorEmail: row.actor?.email ?? row.actor_email ?? null,
         entityId: row.entity_id ?? null,
         oldRole: row.old_value?.role ?? null,
         newRole: row.new_value?.role ?? null,
@@ -277,15 +309,29 @@ function StaffInner() {
   async function handleOpenEditDialog(staffMember: StaffRecord) {
     setEditDialog({ open: true, staff: staffMember });
     try {
-      // Fetch full staff profile data
+      // Staff list is sourced from `users` (role=staff). Load profile from `users`
+      // to avoid relying on legacy `staff` table columns that may not exist.
       const { data, error } = await db
-        .from("staff")
-        .select("*")
+        .from("users")
+        .select("id, name, email, phone, avatar_url, status")
         .eq("id", staffMember.id)
         .eq("gym_id", user.gymId)
+        .eq("role", "staff")
         .single();
       if (error) throw error;
-      setEditingProfile({ ...data, photo: null, photoUrl: data.avatar });
+      setEditingProfile({
+        ...data,
+        // Normalize to the fields used by the edit dialog + save handler
+        avatar: data.avatar_url ?? null,
+        role: staffMember.role ?? "staff",
+        department: staffMember.department ?? null,
+        rating: staffMember.rating ?? null,
+        experienceYears: staffMember.experienceYears ?? null,
+        specialties: staffMember.specialties ?? null,
+        schedule: staffMember.schedule ?? null,
+        photo: null,
+        photoUrl: data.avatar_url ?? null,
+      });
     } catch (err: any) {
       toast.error("Failed to load staff profile: " + (err?.message || "Unknown error"));
       setEditDialog({ open: false, staff: null });
@@ -614,7 +660,7 @@ function StaffInner() {
                       </p>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
-                      By: {log.actorEmail || "Unknown admin"} • User ID: {log.entityId || "Unknown"}
+                      By: {log.actorName || log.actorEmail || "Unknown admin"} • User ID: {log.entityId || "Unknown"}
                     </p>
                     {log.reason && (
                       <p className="text-xs mt-1">{log.reason}</p>
@@ -687,7 +733,7 @@ function StaffInner() {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {filteredStaff.map((member) => (
-            <Card key={member.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleOpenEditDialog(member)}>
+            <Card key={member.id} data-staff-id={member.id} className={`hover:shadow-md transition-all cursor-pointer ${highlightedStaffId === member.id ? "ring-2 ring-primary ring-offset-2 shadow-lg shadow-primary/20 animate-pulse" : ""}`} onClick={() => handleOpenEditDialog(member)}>
               <CardContent className="p-6">
                 <div className="flex items-start gap-4">
                   <Avatar className="h-16 w-16">

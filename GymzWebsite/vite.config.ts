@@ -7,8 +7,9 @@ import path from "path";
 export default defineConfig(({ mode }) => ({
   server: {
     host: "0.0.0.0",
-    port: 5174,
-    strictPort: true,
+    /** Match local expectation: http://localhost:3000/ */
+    port: 3000,
+    strictPort: false,
     open: false,
   },
   plugins: [

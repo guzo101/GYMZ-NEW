@@ -15,18 +15,22 @@ import { SelfCheckInNotificationPopup, SelfCheckInNotification } from "../compon
 import { GymCheckInBarcodeDisplay } from "../components/GymCheckInBarcodeDisplay";
 import { EventCheckInBarcodeDisplay } from "../components/EventCheckInBarcodeDisplay";
 import { verifyUserCheckIn, searchUsersByName, CheckInResult } from "../api/checkin";
-import { QrCode, Search, Loader2, Zap, ZapOff } from "lucide-react";
+import { QrCode, Search, Loader2, Zap, ZapOff, MonitorSmartphone, CalendarCheck, Volume2, VolumeX } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/hooks/useAuth";
+import { useAudioFeedback, SoundProfile } from "@/hooks/useAudioFeedback";
 import { supabase } from "@/integrations/supabase/client";
+import { generateOnboardingAssessmentPdf } from "@/services/memberAssessmentReportService";
 
 export function CheckInPage() {
   const { user } = useAuth();
+  const { playSuccess, playError, ensureAudioResumed, profile, setProfile, soundEnabled, setSoundEnabled } = useAudioFeedback();
   const [verificationResult, setVerificationResult] = useState<CheckInResult | null>(null);
   const [isPopupOpen, setIsPopupOpen] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -49,10 +53,10 @@ export function CheckInPage() {
   // Self-check-in notifications (when member scans gym/event barcode)
   const [selfCheckInNotification, setSelfCheckInNotification] = useState<SelfCheckInNotification | null>(null);
   const [selfCheckInPopupOpen, setSelfCheckInPopupOpen] = useState(false);
+  const gymId = (user as any)?.gymId;
 
   // Realtime: admin sees popup when member scans gym/event barcode
   useEffect(() => {
-    const gymId = (user as any)?.gymId;
     if (!gymId) return;
 
     const channel = supabase
@@ -66,6 +70,7 @@ export function CheckInPage() {
           filter: `gym_id=eq.${gymId}`,
         },
         (payload) => {
+          console.log("🔔 Realtime notification received:", payload);
           const row = payload.new as {
             id: string;
             user_id: string;
@@ -74,6 +79,14 @@ export function CheckInPage() {
             reason: string;
             source: string;
           };
+          // Ensure audio is ready then play exactly one sound: success or error
+          ensureAudioResumed().then(() => {
+            if (row.success) {
+              playSuccess();
+            } else {
+              playError();
+            }
+          });
           setSelfCheckInNotification({
             id: row.id,
             user_id: row.user_id,
@@ -90,7 +103,7 @@ export function CheckInPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [(user as any)?.gymId]);
+  }, [gymId, playSuccess, playError, ensureAudioResumed]);
 
   // Debounced search for name search
   useEffect(() => {
@@ -143,18 +156,21 @@ export function CheckInPage() {
         setIsPopupOpen(true);
       }
 
-      // Show toast based on result
+      // Show toast and play sound based on result
       if (result.status === "approved") {
+        playSuccess();
         toast.success(`Access granted: ${result.user.fullName}`, {
           description: result.reason,
         });
       } else {
+        playError();
         toast.error(`Access denied: ${result.user.fullName}`, {
           description: result.reason,
         });
       }
     } catch (error: any) {
       console.error("❌ Verification error:", error);
+      playError();
       const errorMessage = error.message || "User not found or verification failed";
 
       setScanStatus({
@@ -179,18 +195,16 @@ export function CheckInPage() {
         setScanStatus(null);
       }, 5000);
     }
-  }, []);
+  }, [playSuccess, playError]);
 
-  // Handle QR Code scan
+  // Handle QR Code scan: verify then play success or error sound only (no extra click sound)
   const handleQRScan = useCallback((qrCode: string) => {
     console.log("📷 QR Code scanned:", qrCode);
     handleVerify(qrCode);
   }, [handleVerify]);
 
-  // Handle tab change
-  const handleTabChange = (value: string) => {
-    // Handle tab switching if needed in the future
-  };
+  // Track active tab so we unmount the scanner when switching away (stops camera)
+  const [scanTabValue, setScanTabValue] = useState("qr");
 
   // Handle Name Search selection
   const handleNameSelect = useCallback((userId: string) => {
@@ -276,6 +290,21 @@ export function CheckInPage() {
     }
   };
 
+  const handlePrintAssessment = async () => {
+    if (!verificationResult?.userId) {
+      toast.error("Unable to print assessment: member ID not found.");
+      return;
+    }
+
+    try {
+      await generateOnboardingAssessmentPdf(verificationResult.userId, user?.name || user?.email || "Admin");
+      toast.success("Onboarding assessment generated.");
+    } catch (error: any) {
+      console.error("Failed to generate onboarding assessment:", error);
+      toast.error(error?.message || "Failed to generate onboarding assessment.");
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -287,13 +316,27 @@ export function CheckInPage() {
       </div>
 
       {/* Gym & Event Barcodes for Member Self-Check-in */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <GymCheckInBarcodeDisplay />
-        <EventCheckInBarcodeDisplay />
-      </div>
+      <Tabs defaultValue="gym-barcode" className="w-full">
+        <TabsList className="grid w-full grid-cols-2 mb-4">
+          <TabsTrigger value="gym-barcode" className="flex items-center gap-2">
+            <MonitorSmartphone className="h-4 w-4" />
+            Gym QR Code
+          </TabsTrigger>
+          <TabsTrigger value="event-barcode" className="flex items-center gap-2">
+            <CalendarCheck className="h-4 w-4" />
+            Event QR Code
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="gym-barcode">
+          <GymCheckInBarcodeDisplay />
+        </TabsContent>
+        <TabsContent value="event-barcode">
+          <EventCheckInBarcodeDisplay />
+        </TabsContent>
+      </Tabs>
 
       {/* Two Input Methods Tabs */}
-      <Tabs defaultValue="qr" className="w-full" onValueChange={handleTabChange}>
+      <Tabs value={scanTabValue} onValueChange={setScanTabValue} className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="qr">
             <QrCode className="h-4 w-4 mr-2" />
@@ -307,18 +350,89 @@ export function CheckInPage() {
 
         {/* QR Code Scanner Tab */}
         <TabsContent value="qr" className="mt-6 space-y-4">
-          <div className="flex items-center justify-end space-x-2 px-1">
-            <div className="flex items-center space-x-2 bg-muted/50 px-3 py-1.5 rounded-full border border-border">
-              {handsFreeMode ? <Zap className="h-4 w-4 text-yellow-500" /> : <ZapOff className="h-4 w-4 text-muted-foreground" />}
-              <Label htmlFor="hands-free" className="text-xs font-semibold cursor-pointer">Hands-free Mode</Label>
-              <Switch
-                id="hands-free"
-                checked={handsFreeMode}
-                onCheckedChange={setHandsFreeMode}
-              />
-            </div>
+          <div className="flex items-center justify-end space-x-3 px-1">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9 px-3 gap-2 rounded-full border-border bg-muted/50">
+                  {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4 text-muted-foreground" />}
+                  <span className="text-xs font-semibold capitalize">{profile} Sound</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-3" align="end">
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <h4 className="font-semibold text-sm">Scan sounds</h4>
+                    <p className="text-xs text-muted-foreground">Click the page once to enable; choose a style below.</p>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="sound-enabled" className="text-xs font-medium">Sound on</Label>
+                    <Switch
+                      id="sound-enabled"
+                      checked={soundEnabled}
+                      onCheckedChange={setSoundEnabled}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium text-muted-foreground">Style</p>
+                    <div className="grid gap-1.5">
+                      {([
+                        { id: "modern" as SoundProfile, label: "Modern", desc: "Single soft beep" },
+                        { id: "retro" as SoundProfile, label: "Retro", desc: "Two-tone classic" },
+                        { id: "minimal" as SoundProfile, label: "Minimal", desc: "Short tick" },
+                      ]).map(({ id, label, desc }) => (
+                        <Button
+                          key={id}
+                          variant={profile === id ? "default" : "outline"}
+                          size="sm"
+                          className="justify-start h-auto py-2 text-xs font-medium"
+                          onClick={() => {
+                            setProfile(id);
+                            if (soundEnabled) setTimeout(() => playSuccess(), 50);
+                          }}
+                        >
+                          {profile === id && <Volume2 className="mr-2 h-3.5 w-3.5 shrink-0" />}
+                          <span className="flex flex-col items-start">
+                            <span>{label}</span>
+                            <span className="text-[10px] font-normal opacity-70">{desc}</span>
+                          </span>
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="w-full text-xs"
+                    onClick={() => { ensureAudioResumed().then((ok) => ok && playSuccess()); }}
+                  >
+                    Test sound
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center space-x-2 bg-muted/50 px-3 py-1.5 rounded-full border border-border h-9">
+                    {handsFreeMode ? <Zap className="h-4 w-4 text-yellow-500" /> : <ZapOff className="h-4 w-4 text-muted-foreground" />}
+                    <Label htmlFor="hands-free" className="text-xs font-semibold cursor-pointer">Hands-free</Label>
+                    <Switch
+                      id="hands-free"
+                      checked={handsFreeMode}
+                      onCheckedChange={setHandsFreeMode}
+                    />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[220px]">
+                  When on, no popup after each scan—result shows on the scanner only. Good for rapid check-ins.
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
-          <QRScanner onScan={handleQRScan} lastResult={scanStatus} />
+          {scanTabValue === "qr" && (
+            <QRScanner onScan={handleQRScan} onUnlockAudio={ensureAudioResumed} lastResult={scanStatus} />
+          )}
         </TabsContent>
 
         {/* Name Search Tab */}
@@ -453,6 +567,7 @@ export function CheckInPage() {
         result={verificationResult}
         onRenewMembership={handleRenewMembership}
         onOverrideAccess={handleOverrideAccess}
+        onPrintAssessment={handlePrintAssessment}
       />
 
       {/* Self-check-in notification popup (member scanned gym/event barcode) */}

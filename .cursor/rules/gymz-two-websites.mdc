@@ -1,0 +1,23 @@
+---
+description: Two marketing web roots — never mix GymzWebsite vs gymzandnutrition
+alwaysApply: true
+---
+
+# Gymz: two different “website” folders
+
+Do **not** assume which site the user means. If they say **gymzandnutrition** or **Game On / gymz.app**, use **`gymzandnutrition/`**. If they say **GymzWebsite** or the Vite dev app in **`GymzWebsite/`**, use that.
+
+## `gymzandnutrition/` (static build — user’s primary marketing site for “Gymz Game On”)
+
+- **What it is:** Prebuilt static files (`index.html`, `assets/…`). There is **no** `package.json` here in-repo.
+- **How to run:** From repo root: `npx --yes serve gymzandnutrition -l 3000` → **http://localhost:3000/**
+- **Do not** run `npm run dev` inside `GymzWebsite` when the user asked for **gymzandnutrition**.
+
+## `GymzWebsite/` (separate Vite + React source project)
+
+- **What it is:** Full **source** app (`npm run dev`, `vite.config.ts`). Different product/copy pipeline from the static `gymzandnutrition` build.
+- **How to run:** `cd GymzWebsite && npm install && npm run dev` (port from `vite.config.ts` / terminal output).
+
+## Rule
+
+When the user says **“run the website”** without naming a folder, **ask which folder** or default to **`gymzandnutrition`** if they previously stated that is the one they care about.

@@ -259,6 +259,9 @@ export default function GymsDashboard() {
                         <Button onClick={fetchAll} variant="outline" className="border-white/10 bg-transparent text-white hover:bg-white/5 rounded-xl gap-2 hidden sm:flex">
                             <RefreshCw className="h-4 w-4" />
                         </Button>
+                        <Button onClick={() => navigate("/token-analytics")} variant="outline" className="border-white/10 bg-transparent text-white hover:bg-white/5 rounded-xl gap-2 mr-2">
+                            Token analytics
+                        </Button>
                         <Button onClick={() => navigate("/audit-logs")} variant="outline" className="border-white/10 bg-transparent text-white hover:bg-white/5 rounded-xl gap-2">
                             <FileText className="h-4 w-4" /> Audit Logs
                         </Button>

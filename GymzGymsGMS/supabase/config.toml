@@ -1,1 +1,10 @@
-project_id = "kippufuotsphsvblmcea"
+project_id = "bivgvttxaymcdnuvyugv"
+
+[functions.check-push-receipts]
+verify_jwt = false
+
+[functions.submit-website-inquiry]
+verify_jwt = false
+
+[functions.record-website-event]
+verify_jwt = false

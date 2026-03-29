@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +34,9 @@ export default function Inquiries() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
     const [activeTab, setActiveTab] = useState("all");
+    const [searchParams, setSearchParams] = useSearchParams();
+    const [highlightedInquiryId, setHighlightedInquiryId] = useState<string | null>(null);
+    const lastScrolledIdRef = useRef<string | null>(null);
 
     useEffect(() => {
         fetchInquiries();
@@ -89,6 +93,31 @@ export default function Inquiries() {
             default: return <Badge variant="outline">{status}</Badge>;
         }
     };
+
+    // Handle deep link from search: scroll to inquiry and highlight
+    useEffect(() => {
+        if (loading || inquiries.length === 0) return;
+        const idQ = searchParams.get("id");
+        if (!idQ || lastScrolledIdRef.current === idQ) return;
+        const found = inquiries.find((i: any) => i.id === idQ);
+        if (found) {
+            lastScrolledIdRef.current = idQ;
+            setHighlightedInquiryId(idQ);
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    document.querySelector(`[data-inquiry-id="${idQ}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                }, 100);
+            });
+            setTimeout(() => {
+                setHighlightedInquiryId(null);
+                lastScrolledIdRef.current = null;
+                const np = new URLSearchParams(searchParams);
+                np.delete("id");
+                np.delete("highlight");
+                setSearchParams(np, { replace: true });
+            }, 2000);
+        }
+    }, [loading, inquiries, searchParams]);
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
@@ -156,7 +185,7 @@ export default function Inquiries() {
                                     </tr>
                                 ) : (
                                     filteredInquiries.map((item) => (
-                                        <tr key={item.id} className="hover:bg-stone-800/20 transition-colors group">
+                                        <tr key={item.id} data-inquiry-id={item.id} className={`hover:bg-stone-800/20 transition-all group ${highlightedInquiryId === item.id ? "bg-primary/10 ring-2 ring-primary ring-inset" : ""}`}>
                                             <td className="px-6 py-4">
                                                 <div className="flex flex-col">
                                                     <span className="text-sm font-medium text-stone-200">{item.full_name || 'Anonymous'}</span>

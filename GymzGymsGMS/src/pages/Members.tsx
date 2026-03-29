@@ -1,5 +1,5 @@
 /* @ts-nocheck */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatsCard } from "@/components/StatsCard";
@@ -10,20 +10,28 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Search, Filter, Plus, User, Crown, Star, Bell, Send, Edit, MessageCircle, X, Check, Grid3x3, LayoutGrid, List, Calendar, Zap, Users, Sparkles, RefreshCw } from "lucide-react";
+import { Search, Filter, User, UserPlus, Crown, Star, Bell, Send, Edit, MessageCircle, X, Check, Grid3x3, LayoutGrid, List, Calendar, Zap, Users, Sparkles, RefreshCw, UploadCloud } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ArrowUpDown, SortAsc, SortDesc, ChevronDown, Download } from "lucide-react";
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { addBrandedHeader } from "@/lib/pdfBranding";
+import { addBrandedHeader, fetchGymNameForReport } from "@/lib/pdfBranding";
 import { sanitizeMembershipStatuses, isMembershipValid } from "@/services/membershipService";
 import { DataMapper } from "@/utils/dataMapper";
 import { fetchGymPlans } from "@/services/gymPricing";
+import { generateMonthlyProgressPdf, generateOnboardingAssessmentPdf } from "@/services/memberAssessmentReportService";
 const db = {
   from: (...args: any[]) => (supabase as any).from(...args),
 };
@@ -37,6 +45,7 @@ interface MemberRecord {
   membershipType: string | null;
   membershipStatus: string | null;
   joinDate: string | null;
+  lastPaymentDate: string | null;
   levelLabel: string | null;
   points: number | null;
   streak: number | null;
@@ -70,6 +79,32 @@ export default function Members() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [exportingMembers, setExportingMembers] = useState(false);
 
+  const [onboardDialog, setOnboardDialog] = useState(false);
+  const [onboardingData, setOnboardingData] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    planId: "",
+    paidAt: format(new Date(), "yyyy-MM-dd")
+  });
+  const [submittingOnboard, setSubmittingOnboard] = useState(false);
+  const [gymPlans, setGymPlans] = useState<any[]>([]);
+
+  // Bulk upload dialog state
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
+  const [bulkPlanId, setBulkPlanId] = useState<string>("");
+  const [bulkPaidAt, setBulkPaidAt] = useState<string>(format(new Date(), "yyyy-MM-dd"));
+  const [bulkRows, setBulkRows] = useState<any[]>([]);
+  const [bulkColumns, setBulkColumns] = useState<string[]>([]);
+  const [bulkFirstNameColumn, setBulkFirstNameColumn] = useState<string>("");
+  const [bulkLastNameColumn, setBulkLastNameColumn] = useState<string>("");
+  const [bulkEmailColumn, setBulkEmailColumn] = useState<string>("");
+  const [bulkPhoneColumn, setBulkPhoneColumn] = useState<string>("");
+  const [bulkPaidAtColumn, setBulkPaidAtColumn] = useState<string>("");
+  const [bulkUploading, setBulkUploading] = useState(false);
+  const [bulkErrors, setBulkErrors] = useState<string[]>([]);
+
   // Chat dialog state
   const [chatDialog, setChatDialog] = useState<{ open: boolean; member: MemberRecord | null }>({ open: false, member: null });
   const [messages, setMessages] = useState<any[]>([]);
@@ -85,6 +120,8 @@ export default function Members() {
   const [sortField, setSortField] = useState<"points" | "streak" | "join_date" | "name" | "expiry">("name");
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
   const [searchParams, setSearchParams] = useSearchParams();
+  const [highlightedMemberId, setHighlightedMemberId] = useState<string | null>(null);
+  const lastScrolledIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const init = async () => {
@@ -95,6 +132,12 @@ export default function Members() {
       setGymPlanNames(plans.map(p => p.planName));
     };
     init();
+  }, [user?.gymId]);
+
+  useEffect(() => {
+    if (user?.gymId) {
+      fetchGymPlans(user.gymId, null).then(setGymPlans);
+    }
   }, [user?.gymId]);
 
   // Handle deep linking via query parameters
@@ -125,14 +168,27 @@ export default function Members() {
       }
     }
 
-    if (idQ) {
+    if (idQ && lastScrolledIdRef.current !== idQ) {
       const member = members.find(m => m.id === idQ);
       if (member) {
-        handleOpenEditDialog(member);
-        // Clear the ID from search params so it doesn't keep opening on every re-render/filter change
-        const newParams = new URLSearchParams(searchParams);
-        newParams.delete("id");
-        setSearchParams(newParams, { replace: true });
+        lastScrolledIdRef.current = idQ;
+        setHighlightedMemberId(member.id);
+        // Small delay so DOM has rendered the card
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            const el = document.querySelector(`[data-member-id="${idQ}"]`);
+            el?.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 100);
+        });
+        // Clear highlight after 2 seconds and remove id from URL
+        setTimeout(() => {
+          setHighlightedMemberId(null);
+          lastScrolledIdRef.current = null;
+          const newParams = new URLSearchParams(searchParams);
+          newParams.delete("id");
+          newParams.delete("highlight");
+          setSearchParams(newParams, { replace: true });
+        }, 2000);
       }
     }
   }, [loading, members, searchParams]);
@@ -293,7 +349,7 @@ export default function Members() {
     setError(null);
     const query = db
       .from("users")
-      .select("id, name, first_name, last_name, email, role, status, membership_status, unique_id, join_date, membership_type, renewal_due_date, points, streak, avatar_url, height, age, goal")
+      .select("id, name, first_name, last_name, email, role, status, membership_status, unique_id, join_date, last_payment_date, membership_type, renewal_due_date, points, streak, avatar_url, height, age, goal")
       .eq("role", "member")
       .eq("gym_id", user.gymId)
       .order("created_at", { ascending: false });
@@ -419,6 +475,10 @@ export default function Members() {
         message: notificationMessage.trim(),
         user_id: notificationDialog.member.id,
         gym_id: user.gymId,
+        sender_id: user.id,
+        sender_type: "admin",
+        sender_name: user.name || user.email || "Admin",
+        title: user.name || "Admin",
         type: "admin_update",
         read: false
       });
@@ -797,9 +857,13 @@ export default function Members() {
   const exportMembersToPDF = async () => {
     setExportingMembers(true);
     try {
+      const gymName = await fetchGymNameForReport(user?.gymId || (user as any)?.gym_id);
+      const safeFilename = gymName.replace(/[^a-zA-Z0-9_-]/g, '_');
+
       const doc = new jsPDF('l', 'mm', 'a4') as any; // Landscape for more columns
 
-      const startY = await addBrandedHeader(doc, 'Gymz MEMBER REGISTRY');
+      const generatedBy = user?.name || user?.email || 'Admin';
+      const startY = addBrandedHeader(doc, gymName, 'Member Registry', undefined, generatedBy);
 
       // Statistics Summary
       doc.setTextColor(0, 0, 0);
@@ -833,6 +897,8 @@ export default function Members() {
         m.name || m.email || '---',
         (m.membershipType || '—').toUpperCase(),
         (m.membershipStatus || 'Inactive').toUpperCase(),
+        m.joinDate ? format(new Date(m.joinDate), 'dd/MM/yyyy') : '---',
+        m.lastPaymentDate ? format(new Date(m.lastPaymentDate), 'dd/MM/yyyy') : '---',
         m.renewalDueDate ? format(new Date(m.renewalDueDate), 'dd/MM/yyyy') : '---',
         (m.points || 0).toString(),
         (m.streak || 0).toString()
@@ -840,19 +906,19 @@ export default function Members() {
 
       autoTable(doc, {
         startY: (doc as any).lastAutoTable?.finalY + 15 || 100,
-        head: [['ID', 'Name/Email', 'Tier', 'Status', 'Expiry', 'Points', 'Streak']],
+        head: [['ID', 'Name/Email', 'Tier', 'Status', 'Registered', 'Last Paid', 'Expiry', 'Points', 'Streak']],
         body: tableData,
         theme: 'grid',
         headStyles: { fillColor: [42, 75, 42] },
         styles: { fontSize: 8 },
         columnStyles: {
-          0: { cellWidth: 25 },
-          1: { cellWidth: 60 },
+          0: { cellWidth: 22 },
+          1: { cellWidth: 50 },
           3: { fontStyle: 'bold' }
         }
       });
 
-      doc.save(`Gymz_Members_${format(new Date(), 'yyyyMMdd')}.pdf`);
+      doc.save(`${safeFilename}_Members_${format(new Date(), 'yyyyMMdd')}.pdf`);
       toast.success("Member list exported successfully!");
     } catch (err) {
       console.error("Member PDF Export Error:", err);
@@ -861,6 +927,357 @@ export default function Members() {
       setExportingMembers(false);
     }
   };
+
+  async function handleOnboardMember() {
+    if (
+      !onboardingData.firstName ||
+      !onboardingData.lastName ||
+      !onboardingData.email ||
+      !onboardingData.planId ||
+      !onboardingData.paidAt
+    ) {
+      toast.error("Please fill in all required fields.");
+      return;
+    }
+    setSubmittingOnboard(true);
+    try {
+      const fullName = `${onboardingData.firstName.trim()} ${onboardingData.lastName.trim()}`;
+      const { data, error } = await supabase.functions.invoke("onboard-member", {
+        body: {
+          gym_id: user.gymId,
+          name: fullName,
+          email: onboardingData.email,
+          phone: onboardingData.phone || null,
+          plan_id: onboardingData.planId,
+          paid_at: onboardingData.paidAt
+        }
+      });
+
+      if (error) {
+        // Enforce that the catch block can access the context
+        (error as any).message = error.message || "Edge Function error";
+        throw error;
+      }
+      if (data?.error) throw new Error(data.error);
+
+      toast.success(data?.message || "Member onboarded successfully!");
+      setOnboardDialog(false);
+      setOnboardingData({
+        firstName: "",
+        lastName: "",
+        email: "",
+        phone: "",
+        planId: "",
+        paidAt: format(new Date(), "yyyy-MM-dd")
+      });
+      await fetchMembers();
+    } catch (err: any) {
+      console.error("Onboarding error:", err);
+
+      let message = err?.message || "Internal system error";
+
+      // If it's a Supabase Function error, try to get the specific message from the body
+      if (err?.context?.json?.error) {
+        message = err.context.json.error;
+      } else if (err?.context) {
+        try {
+          // Sometimes it's a stringified body
+          const body = await err.context.text();
+          const parsed = JSON.parse(body);
+          if (parsed.error) message = parsed.error;
+        } catch (e) {
+          // Fallback to original message
+        }
+      }
+
+      toast.error(`Onboarding failed: ${message}`);
+    } finally {
+      setSubmittingOnboard(false);
+    }
+  }
+
+  /**
+   * Normalize date strings from CSV to yyyy-MM-dd.
+   * Handles: yyyy-MM-dd, MM/DD/YYYY, DD/MM/YYYY (ambiguous — treated as MM/DD),
+   *          DD-MM-YYYY, YYYY/MM/DD, and Excel serial numbers.
+   */
+  const normalizeDateString = (raw: string): string => {
+    if (!raw) return raw;
+    const trimmed = raw.trim();
+
+    // Already ISO format yyyy-MM-dd
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+
+    // Excel serial number (numeric)
+    if (/^\d{5}$/.test(trimmed)) {
+      const serial = parseInt(trimmed, 10);
+      // Excel epoch starts 1900-01-01 (with leap year bug, offset = 25569 for Unix epoch)
+      const msDate = (serial - 25569) * 86400 * 1000;
+      const d = new Date(msDate);
+      if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    }
+
+    // MM/DD/YYYY or DD/MM/YYYY — try as MM/DD/YYYY first
+    const slashMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (slashMatch) {
+      const [, p1, p2, year] = slashMatch;
+      const candidate = new Date(`${year}-${p1.padStart(2,'0')}-${p2.padStart(2,'0')}`);
+      if (!isNaN(candidate.getTime())) return candidate.toISOString().slice(0, 10);
+    }
+
+    // DD-MM-YYYY
+    const dashMatch = trimmed.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if (dashMatch) {
+      const [, day, month, year] = dashMatch;
+      const candidate = new Date(`${year}-${month.padStart(2,'0')}-${day.padStart(2,'0')}`);
+      if (!isNaN(candidate.getTime())) return candidate.toISOString().slice(0, 10);
+    }
+
+    // YYYY/MM/DD
+    const yyyySlash = trimmed.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+    if (yyyySlash) {
+      const [, year, month, day] = yyyySlash;
+      return `${year}-${month.padStart(2,'0')}-${day.padStart(2,'0')}`;
+    }
+
+    // Fallback: let the browser parse it
+    const fallback = new Date(trimmed);
+    if (!isNaN(fallback.getTime())) return fallback.toISOString().slice(0, 10);
+
+    // Return as-is and let the server complain with a clear message
+    return trimmed;
+  };
+
+  const parseCsv = (text: string) => {
+    const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    if (lines.length < 2) return { headers: [], rows: [] };
+
+    const rawHeaders = lines[0].split(",").map((h) => h.trim());
+    const normalizedHeaders = rawHeaders.map((h) => h.toLowerCase());
+    const rows: any[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(",");
+      const row: any = {};
+      normalizedHeaders.forEach((h, idx) => {
+        row[h] = (cols[idx] ?? "").trim();
+      });
+      rows.push(row);
+    }
+    return { headers: rawHeaders, rows };
+  };
+
+  async function handleBulkFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setBulkErrors([]);
+    setBulkColumns([]);
+    setBulkFirstNameColumn("");
+    setBulkLastNameColumn("");
+    setBulkEmailColumn("");
+    setBulkPhoneColumn("");
+    setBulkPaidAtColumn("");
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const text = String(reader.result || "");
+        const { headers, rows } = parseCsv(text);
+        setBulkRows(rows);
+        setBulkColumns(headers);
+
+        // Auto-detect sensible defaults for mappings based on common header names
+        const findHeader = (candidates: string[]) => {
+          const lower = headers.map((h) => h.toLowerCase());
+          const idx = candidates
+            .map((c) => lower.indexOf(c))
+            .find((i) => i !== -1);
+          return typeof idx === "number" && idx >= 0 ? headers[idx] : "";
+        };
+
+        setBulkFirstNameColumn(
+          findHeader(["first name", "first_name", "firstname"])
+        );
+        setBulkLastNameColumn(
+          findHeader(["last name", "last_name", "lastname"])
+        );
+        setBulkEmailColumn(findHeader(["email"]));
+        setBulkPhoneColumn(
+          findHeader([
+            "mobile no.",
+            "mobile",
+            "phone",
+            "phone no.",
+            "phone_number"
+          ])
+        );
+        setBulkPaidAtColumn(
+          findHeader([
+            "date joined",
+            "date_joined",
+            "join date",
+            "join_date",
+            "paid_at",
+            "payment date",
+            "payment_date",
+            "start date",
+            "start_date"
+          ])
+        );
+      } catch (err: any) {
+        console.error("Bulk CSV parse error:", err);
+        setBulkRows([]);
+        setBulkErrors(["Could not read file. Please check the format."]);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  async function handleBulkUpload() {
+    if (!user?.gymId) {
+      toast.error("Missing gym context.");
+      return;
+    }
+    if (!bulkPlanId || (!bulkPaidAt && !bulkPaidAtColumn)) {
+      toast.error("Please choose membership plan and payment date (or map a date column).");
+      return;
+    }
+    if (!bulkRows.length) {
+      toast.error("Please upload a CSV file with members.");
+      return;
+    }
+
+    const resolveFromMappedColumn = (row: any, mappedHeader: string | "") => {
+      if (!mappedHeader) return undefined;
+      return row[mappedHeader.toLowerCase()];
+    };
+
+    const errors: string[] = [];
+    let successCount = 0;
+
+    setBulkUploading(true);
+    try {
+      for (let index = 0; index < bulkRows.length; index++) {
+        const row = bulkRows[index];
+        const firstName =
+          resolveFromMappedColumn(row, bulkFirstNameColumn) ||
+          row["first name"] ||
+          row["first_name"] ||
+          row["firstname"];
+        const lastName =
+          resolveFromMappedColumn(row, bulkLastNameColumn) ||
+          row["last name"] ||
+          row["last_name"] ||
+          row["lastname"];
+        const email =
+          resolveFromMappedColumn(row, bulkEmailColumn) || row["email"];
+        const phone =
+          resolveFromMappedColumn(row, bulkPhoneColumn) ||
+          row["mobile no."] ||
+          row["mobile"] ||
+          row["phone"] ||
+          row["phone no."] ||
+          row["phone_number"];
+
+        // Resolve per-row payment date from mapped column, fall back to global bulkPaidAt
+        const rowPaidAt =
+          resolveFromMappedColumn(row, bulkPaidAtColumn) ||
+          row["date joined"] ||
+          row["date_joined"] ||
+          row["join date"] ||
+          row["join_date"] ||
+          row["payment date"] ||
+          row["payment_date"];
+        const resolvedPaidAtRaw = rowPaidAt ? String(rowPaidAt).trim() : bulkPaidAt;
+        const resolvedPaidAt = resolvedPaidAtRaw ? normalizeDateString(resolvedPaidAtRaw) : "";
+
+        if (!firstName || !lastName || !email) {
+          errors.push(`Row ${index + 2}: Missing required first name, last name, or email.`);
+          continue;
+        }
+
+        if (!resolvedPaidAt) {
+          errors.push(`Row ${index + 2}: Missing payment date.`);
+          continue;
+        }
+
+        // Validate the normalized date is actually parseable before sending
+        if (isNaN(new Date(resolvedPaidAt).getTime())) {
+          errors.push(`Row ${index + 2}: Invalid date format "${resolvedPaidAtRaw}". Use YYYY-MM-DD, MM/DD/YYYY, or DD-MM-YYYY.`);
+          continue;
+        }
+
+        try {
+          const fullName = `${firstName.trim()} ${lastName.trim()}`;
+          const { data, error } = await supabase.functions.invoke("onboard-member", {
+            body: {
+              gym_id: user.gymId,
+              name: fullName,
+              email: String(email).trim(),
+              phone: phone ? String(phone).trim() : null,
+              plan_id: bulkPlanId,
+              paid_at: resolvedPaidAt,
+            },
+          });
+
+          if (error) {
+            // Try to extract real error body from supabase FunctionsHttpError
+            let realMessage = error.message || "Edge Function error";
+            try {
+              const ctx = (error as any).context;
+              if (ctx) {
+                const bodyText = typeof ctx.text === 'function' ? await ctx.text() : null;
+                if (bodyText) {
+                  const parsed = JSON.parse(bodyText);
+                  if (parsed?.error) realMessage = parsed.error;
+                }
+              }
+            } catch (_) { /* ignore */ }
+            throw new Error(realMessage);
+          }
+          if (data?.error) throw new Error(data.error);
+
+          successCount++;
+        } catch (err: any) {
+          console.error(`Bulk onboarding error row ${index + 2}:`, err);
+          const message = err?.message || "Unknown error";
+          errors.push(`Row ${index + 2}: ${message}`);
+        }
+      }
+
+      setBulkErrors(errors);
+      if (successCount > 0) {
+        toast.success(`Successfully onboarded ${successCount} member(s).`);
+        await fetchMembers();
+      }
+      if (!errors.length) {
+        setBulkDialogOpen(false);
+        setBulkRows([]);
+      }
+    } finally {
+      setBulkUploading(false);
+    }
+  }
+
+  async function handlePrintOnboardingAssessment(memberId: string) {
+    try {
+      await generateOnboardingAssessmentPdf(memberId, user?.name || user?.email || "Admin");
+      toast.success("Onboarding assessment generated.");
+    } catch (err: any) {
+      console.error("Onboarding assessment generation failed:", err);
+      toast.error(err?.message || "Failed to generate onboarding assessment.");
+    }
+  }
+
+  async function handlePrintMonthlyProgress(memberId: string) {
+    try {
+      await generateMonthlyProgressPdf(memberId, user?.name || user?.email || "Admin");
+      toast.success("Monthly progress report generated.");
+    } catch (err: any) {
+      console.error("Monthly progress report generation failed:", err);
+      toast.error(err?.message || "Failed to generate monthly progress report.");
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -873,13 +1290,17 @@ export default function Members() {
           </nav>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setBulkDialogOpen(true)}>
+            <UploadCloud className="h-4 w-4 mr-2" />
+            Bulk Upload Old Members
+          </Button>
+          <Button variant="outline" onClick={() => setOnboardDialog(true)}>
+            <UserPlus className="h-4 w-4 mr-2" />
+            Onboard Old Member
+          </Button>
           <Button variant="outline" onClick={exportMembersToPDF} disabled={exportingMembers}>
             {exportingMembers ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
             Export List
-          </Button>
-          <Button className="w-fit">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Member
           </Button>
         </div>
       </div>
@@ -1087,7 +1508,7 @@ export default function Members() {
           {viewMode === "grid" && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredMembers.map((member) => (
-                <Card key={member.id} className="hover:shadow-md transition-shadow flex flex-col relative overflow-hidden group">
+                <Card key={member.id} data-member-id={member.id} className={`hover:shadow-md transition-all flex flex-col relative overflow-hidden group ${highlightedMemberId === member.id ? "ring-2 ring-primary ring-offset-2 shadow-lg shadow-primary/20 animate-pulse" : ""}`}>
                   <CardContent className="p-5 flex flex-col flex-1">
                     {/* Absolute icon container for dashboard consistency */}
                     {(() => {
@@ -1177,9 +1598,23 @@ export default function Members() {
                       </div>
 
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Joined</span>
+                        <span className="text-sm text-muted-foreground">Registered</span>
                         <span className="text-sm">
-                          {member.joinDate ? new Date(member.joinDate).toLocaleDateString() : "Unknown"}
+                          {member.joinDate ? new Date(member.joinDate).toLocaleDateString() : "—"}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Last Paid</span>
+                        <span className="text-sm">
+                          {member.lastPaymentDate ? new Date(member.lastPaymentDate).toLocaleDateString() : "—"}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Expiry</span>
+                        <span className="text-sm">
+                          {member.renewalDueDate ? new Date(member.renewalDueDate).toLocaleDateString() : "—"}
                         </span>
                       </div>
                     </div>
@@ -1238,7 +1673,7 @@ export default function Members() {
           {viewMode === "compact" && (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
               {filteredMembers.map((member) => (
-                <Card key={member.id} className="hover:shadow-md transition-shadow flex flex-col cursor-pointer relative overflow-hidden group" onClick={() => handleOpenEditDialog(member)}>
+                <Card key={member.id} data-member-id={member.id} className={`hover:shadow-md transition-all flex flex-col cursor-pointer relative overflow-hidden group ${highlightedMemberId === member.id ? "ring-2 ring-primary ring-offset-2 shadow-lg shadow-primary/20 animate-pulse" : ""}`} onClick={() => handleOpenEditDialog(member)}>
                   <CardContent className="p-4 flex flex-col items-center text-center">
                     {/* Absolute icon container for dashboard consistency */}
                     {(() => {
@@ -1309,7 +1744,9 @@ export default function Members() {
                         <th className="text-left p-4 font-semibold text-sm">Level</th>
                         <th className="text-left p-4 font-semibold text-sm">Points</th>
                         <th className="text-left p-4 font-semibold text-sm">Streak</th>
-                        <th className="text-left p-4 font-semibold text-sm">Joined</th>
+                        <th className="text-left p-4 font-semibold text-sm">Registered</th>
+                        <th className="text-left p-4 font-semibold text-sm">Last Paid</th>
+                        <th className="text-left p-4 font-semibold text-sm">Expiry</th>
                         <th className="text-right p-4 font-semibold text-sm">Actions</th>
                       </tr>
                     </thead>
@@ -1317,7 +1754,8 @@ export default function Members() {
                       {filteredMembers.map((member, index) => (
                         <tr
                           key={member.id}
-                          className="border-b hover:bg-muted/30 transition-colors cursor-pointer"
+                          data-member-id={member.id}
+                          className={`border-b hover:bg-muted/30 transition-all cursor-pointer ${highlightedMemberId === member.id ? "bg-primary/10 ring-2 ring-primary ring-inset" : ""}`}
                           onClick={() => handleOpenEditDialog(member)}
                         >
                           <td className="p-4">
@@ -1389,7 +1827,17 @@ export default function Members() {
                           </td>
                           <td className="p-4">
                             <span className="text-sm">
-                              {member.joinDate ? new Date(member.joinDate).toLocaleDateString() : "Unknown"}
+                              {member.joinDate ? new Date(member.joinDate).toLocaleDateString() : "—"}
+                            </span>
+                          </td>
+                          <td className="p-4">
+                            <span className="text-sm">
+                              {member.lastPaymentDate ? new Date(member.lastPaymentDate).toLocaleDateString() : "—"}
+                            </span>
+                          </td>
+                          <td className="p-4">
+                            <span className="text-sm">
+                              {member.renewalDueDate ? new Date(member.renewalDueDate).toLocaleDateString() : "—"}
                             </span>
                           </td>
                           <td className="p-4">
@@ -1942,6 +2390,24 @@ export default function Members() {
               <X className="h-4 w-4 mr-2" />
               Cancel
             </Button>
+            {editDialog.member?.id && (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => handlePrintOnboardingAssessment(editDialog.member!.id)}
+                  disabled={savingProfile}
+                >
+                  Print Onboarding Assessment
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => handlePrintMonthlyProgress(editDialog.member!.id)}
+                  disabled={savingProfile}
+                >
+                  Print Monthly Progress
+                </Button>
+              </>
+            )}
             <Button
               onClick={handleSaveProfile}
               disabled={savingProfile || !editingProfile?.name || !editingProfile?.email}
@@ -2037,6 +2503,373 @@ export default function Members() {
                   Send
                 </>
               )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Onboard Old Member Dialog */}
+      <Dialog open={onboardDialog} onOpenChange={setOnboardDialog}>
+        <DialogContent className="sm:max-w-[480px] bg-stone-950 border-stone-800 text-stone-100 p-0 overflow-hidden">
+          <div className="bg-gradient-to-r from-primary/20 to-transparent p-6 pb-4 border-b border-stone-800">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
+                  <UserPlus className="h-4 w-4 text-primary" />
+                </div>
+                Onboard Old Member
+              </DialogTitle>
+              <DialogDescription className="text-stone-400 mt-1">
+                Sync historical payment data for legacy members.
+              </DialogDescription>
+            </DialogHeader>
+          </div>
+
+          <div className="p-6 space-y-5">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-[1px] flex-1 bg-stone-800" />
+                <span className="text-[10px] uppercase tracking-widest text-stone-500 font-bold">Identity Details</span>
+                <div className="h-[1px] flex-1 bg-stone-800" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="onboard-firstName" className="text-xs font-semibold uppercase tracking-wider text-stone-500">First Name *</Label>
+                  <Input
+                    id="onboard-firstName"
+                    value={onboardingData.firstName}
+                    onChange={(e) => setOnboardingData({ ...onboardingData, firstName: e.target.value })}
+                    placeholder="John"
+                    className="bg-stone-900 border-stone-800 focus:border-primary/50 transition-colors"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="onboard-lastName" className="text-xs font-semibold uppercase tracking-wider text-stone-500">Last Name *</Label>
+                  <Input
+                    id="onboard-lastName"
+                    value={onboardingData.lastName}
+                    onChange={(e) => setOnboardingData({ ...onboardingData, lastName: e.target.value })}
+                    placeholder="Doe"
+                    className="bg-stone-900 border-stone-800 focus:border-primary/50 transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="onboard-email" className="text-xs font-semibold uppercase tracking-wider text-stone-500">Email Address *</Label>
+                  <Input
+                    id="onboard-email"
+                    type="email"
+                    value={onboardingData.email}
+                    onChange={(e) => setOnboardingData({ ...onboardingData, email: e.target.value })}
+                    placeholder="john@example.com"
+                    className="bg-stone-900 border-stone-800 focus:border-primary/50 transition-colors"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="onboard-phone" className="text-xs font-semibold uppercase tracking-wider text-stone-500">Phone Number</Label>
+                  <Input
+                    id="onboard-phone"
+                    value={onboardingData.phone}
+                    onChange={(e) => setOnboardingData({ ...onboardingData, phone: e.target.value })}
+                    placeholder="+260..."
+                    className="bg-stone-900 border-stone-800 focus:border-primary/50 transition-colors"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4 pt-2">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-[1px] flex-1 bg-stone-800" />
+                <span className="text-[10px] uppercase tracking-widest text-stone-500 font-bold">Membership & Payment</span>
+                <div className="h-[1px] flex-1 bg-stone-800" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold uppercase tracking-wider text-stone-500">Membership Plan *</Label>
+                  <Select
+                    value={onboardingData.planId}
+                    onValueChange={(val) => setOnboardingData({ ...onboardingData, planId: val })}
+                  >
+                    <SelectTrigger className="bg-stone-900 border-stone-800 focus:border-primary/50 text-left w-full h-10 px-3 py-2 text-sm">
+                      <SelectValue placeholder="Select Plan" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-stone-950 border-stone-800 text-stone-100 z-[1000] min-w-[200px]">
+                      {gymPlans.length > 0 ? (
+                        gymPlans.map((plan) => (
+                          <SelectItem key={plan.id} value={plan.id} className="focus:bg-primary/20 cursor-pointer">
+                            {plan.planName}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <div className="p-2 text-xs text-stone-500 text-center">No active plans found</div>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="onboard-paid-at" className="text-xs font-semibold uppercase tracking-wider text-stone-500">Original Payment Date *</Label>
+                  <Input
+                    id="onboard-paid-at"
+                    type="date"
+                    value={onboardingData.paidAt}
+                    onChange={(e) => setOnboardingData({ ...onboardingData, paidAt: e.target.value })}
+                    className="bg-stone-900 border-stone-800 focus:border-primary/50 transition-colors [color-scheme:dark] h-10"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 bg-stone-900/50 border-t border-stone-800">
+            <Button
+              onClick={handleOnboardMember}
+              disabled={submittingOnboard}
+              className="w-full bg-primary hover:bg-primary/90 text-white font-bold h-11 shadow-lg shadow-primary/20 group"
+            >
+              {submittingOnboard ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <UserPlus className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" />
+              )}
+              {submittingOnboard ? "Processing..." : "Complete Onboarding"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Upload Old Members Dialog */}
+      <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
+        <DialogContent className="sm:max-w-[560px] bg-stone-950 border-stone-800 text-stone-100 p-0 overflow-hidden max-h-[90vh] flex flex-col">
+          <div className="bg-gradient-to-r from-primary/20 to-transparent p-6 pb-4 border-b border-stone-800">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
+                  <UploadCloud className="h-4 w-4 text-primary" />
+                </div>
+                Bulk Upload Old Members
+              </DialogTitle>
+              <DialogDescription className="text-stone-400 mt-1">
+                Upload a CSV file of legacy members. <span className="font-semibold text-stone-300">Required columns:</span> First Name, Last Name, Email.
+                Optional columns like Date Joined, Age, Address, Mobile No., and Emergency Contact can be included but are not required.
+              </DialogDescription>
+            </DialogHeader>
+          </div>
+
+          <div className="p-6 space-y-5 flex-1 overflow-y-auto">
+            <div className="space-y-3">
+              <Label className="text-xs font-semibold uppercase tracking-wider text-stone-500">
+                Upload CSV File
+              </Label>
+              <Input
+                type="file"
+                accept=".csv"
+                onChange={handleBulkFileChange}
+                className="bg-stone-900 border-stone-800 focus:border-primary/50 transition-colors"
+              />
+              <p className="text-[11px] text-stone-500">
+                Minimum headers: <span className="font-mono text-stone-300">First Name, Last Name, Email</span>.{" "}
+                After upload you can map any column names to these fields. You can also add optional headers like{" "}
+                <span className="font-mono text-stone-300">Date Joined, Age, Gender, Address, Mobile No., Emergency Contact Name, Emergency Contact Mobile No.</span>.
+              </p>
+              {bulkRows.length > 0 && (
+                <p className="text-[11px] text-stone-400">
+                  Parsed <span className="font-semibold text-stone-200">{bulkRows.length}</span> row(s) from file.
+                </p>
+              )}
+            </div>
+
+            {bulkColumns.length > 0 && (
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="h-[1px] flex-1 bg-stone-800" />
+                  <span className="text-[10px] uppercase tracking-widest text-stone-500 font-bold">
+                    Map CSV Columns
+                  </span>
+                  <div className="h-[1px] flex-1 bg-stone-800" />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-stone-500">
+                      First Name Column *
+                    </Label>
+                    <Select
+                      value={bulkFirstNameColumn}
+                      onValueChange={setBulkFirstNameColumn}
+                    >
+                      <SelectTrigger className="bg-stone-900 border-stone-800 focus:border-primary/50 text-left w-full h-9 px-3 py-1.5 text-xs">
+                        <SelectValue placeholder="Choose column" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-stone-950 border-stone-800 text-stone-100 z-[1000] max-h-60">
+                        {bulkColumns.map((col) => (
+                          <SelectItem key={col} value={col} className="text-xs">
+                            {col}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-stone-500">
+                      Last Name Column *
+                    </Label>
+                    <Select
+                      value={bulkLastNameColumn}
+                      onValueChange={setBulkLastNameColumn}
+                    >
+                      <SelectTrigger className="bg-stone-900 border-stone-800 focus:border-primary/50 text-left w-full h-9 px-3 py-1.5 text-xs">
+                        <SelectValue placeholder="Choose column" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-stone-950 border-stone-800 text-stone-100 z-[1000] max-h-60">
+                        {bulkColumns.map((col) => (
+                          <SelectItem key={col} value={col} className="text-xs">
+                            {col}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-stone-500">
+                      Email Column *
+                    </Label>
+                    <Select
+                      value={bulkEmailColumn}
+                      onValueChange={setBulkEmailColumn}
+                    >
+                      <SelectTrigger className="bg-stone-900 border-stone-800 focus:border-primary/50 text-left w-full h-9 px-3 py-1.5 text-xs">
+                        <SelectValue placeholder="Choose column" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-stone-950 border-stone-800 text-stone-100 z-[1000] max-h-60">
+                        {bulkColumns.map((col) => (
+                          <SelectItem key={col} value={col} className="text-xs">
+                            {col}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-stone-500">
+                      Phone Column (optional)
+                    </Label>
+                    <Select
+                      value={bulkPhoneColumn}
+                      onValueChange={setBulkPhoneColumn}
+                    >
+                      <SelectTrigger className="bg-stone-900 border-stone-800 focus:border-primary/50 text-left w-full h-9 px-3 py-1.5 text-xs">
+                        <SelectValue placeholder="Choose column" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-stone-950 border-stone-800 text-stone-100 z-[1000] max-h-60">
+                        {bulkColumns.map((col) => (
+                          <SelectItem key={col} value={col} className="text-xs">
+                            {col}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-4 pt-2">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-[1px] flex-1 bg-stone-800" />
+                <span className="text-[10px] uppercase tracking-widest text-stone-500 font-bold">
+                  Membership & Payment
+                </span>
+                <div className="h-[1px] flex-1 bg-stone-800" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold uppercase tracking-wider text-stone-500">
+                    Membership Plan *
+                  </Label>
+                  <Select value={bulkPlanId} onValueChange={setBulkPlanId}>
+                    <SelectTrigger className="bg-stone-900 border-stone-800 focus:border-primary/50 text-left w-full h-10 px-3 py-2 text-sm">
+                      <SelectValue placeholder="Select Plan" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-stone-950 border-stone-800 text-stone-100 z-[1000] min-w-[200px]">
+                      {gymPlans.length > 0 ? (
+                        gymPlans.map((plan) => (
+                          <SelectItem key={plan.id} value={plan.id} className="focus:bg-primary/20 cursor-pointer">
+                            {plan.planName}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <div className="p-2 text-xs text-stone-500 text-center">No active plans found</div>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {bulkColumns.length > 0 && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-stone-500">
+                      Date Column (optional)
+                    </Label>
+                    <Select value={bulkPaidAtColumn} onValueChange={setBulkPaidAtColumn}>
+                      <SelectTrigger className="bg-stone-900 border-stone-800 focus:border-primary/50 text-left w-full h-9 px-3 py-1.5 text-xs">
+                        <SelectValue placeholder="Map from CSV" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-stone-950 border-stone-800 text-stone-100 z-[1000] max-h-60">
+                        {bulkColumns.map((col) => (
+                          <SelectItem key={col} value={col} className="text-xs">
+                            {col}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[10px] text-stone-600">If mapped, each row uses its own date</p>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="bulk-paid-at" className="text-xs font-semibold uppercase tracking-wider text-stone-500">
+                    {bulkPaidAtColumn ? "Fallback Date" : "Payment Date *"}
+                  </Label>
+                  <Input
+                    id="bulk-paid-at"
+                    type="date"
+                    value={bulkPaidAt}
+                    onChange={(e) => setBulkPaidAt(e.target.value)}
+                    className="bg-stone-900 border-stone-800 focus:border-primary/50 transition-colors [color-scheme:dark] h-10"
+                  />
+                  {bulkPaidAtColumn && (
+                    <p className="text-[10px] text-stone-600">Used when a row's date column is empty</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {bulkErrors.length > 0 && (
+              <div className="rounded-md bg-red-950/40 border border-red-900 px-3 py-2 max-h-40 overflow-y-auto">
+                <p className="text-[11px] font-semibold text-red-300 mb-1">Some rows failed validation:</p>
+                <ul className="text-[11px] text-red-200 list-disc pl-4 space-y-0.5">
+                  {bulkErrors.map((err, idx) => (
+                    <li key={idx}>{err}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          <div className="p-6 bg-stone-900/50 border-t border-stone-800">
+            <Button
+              onClick={handleBulkUpload}
+              disabled={bulkUploading}
+              className="w-full bg-primary hover:bg-primary/90 text-white font-bold h-11 shadow-lg shadow-primary/20 group"
+            >
+              {bulkUploading ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <UploadCloud className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" />
+              )}
+              {bulkUploading ? "Uploading..." : "Start Bulk Onboarding"}
             </Button>
           </div>
         </DialogContent>

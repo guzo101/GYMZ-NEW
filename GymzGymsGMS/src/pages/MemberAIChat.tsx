@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import {
   getOrCreateThreadId,
   getOrCreateChatId,
-  sendToMakeAI,
+  sendMessageToAI,
   storeMessage,
   fetchConversations,
   checkChatInactivity,
@@ -116,13 +116,14 @@ export default function MemberAIChat() {
       // Store user message
       await storeMessage(user.id, threadId, chatId, "user", userMessage);
 
-      // Send to Make.ai and get response
-      const response = await sendToMakeAI(
+      // Send to AI (Make or OpenAI per settings); token limits and logging applied
+      const response = await sendMessageToAI(
         "user",
         user.id,
         threadId,
         chatId,
-        userMessage
+        userMessage,
+        { gymId: user.gym_id ?? undefined, featureType: "AI_CHAT" }
       );
 
       // Store AI response

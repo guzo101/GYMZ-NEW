@@ -15,7 +15,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { addBrandedHeader } from "@/lib/pdfBranding";
+import { addBrandedHeader, fetchGymNameForReport } from "@/lib/pdfBranding";
 
 interface Sponsor {
     id: string;
@@ -77,13 +77,19 @@ export default function SponsorReports() {
     const generatePDF = async () => {
         setGenerating(true);
         try {
+            const gymName = await fetchGymNameForReport(user?.gymId || (user as any)?.gym_id);
+            const safeFilename = gymName.replace(/[^a-zA-Z0-9_-]/g, '_');
+
             const doc = new jsPDF();
             const sponsorName = selectedSponsor === "all" ? "All Sponsors" : sponsors.find(s => s.id === selectedSponsor)?.name || "Sponsor";
 
-            const startY = await addBrandedHeader(
+            const generatedBy = user?.name || user?.email || 'Admin';
+            const startY = addBrandedHeader(
                 doc,
+                gymName,
                 "Sponsor Performance Report",
-                `Partner: ${sponsorName} | Gym ID: ${user?.gymId || (user as any)?.gym_id}`
+                `Partner: ${sponsorName}`,
+                generatedBy
             );
 
             // Summary Section
@@ -118,7 +124,7 @@ export default function SponsorReports() {
                 margin: { left: 15, right: 15 }
             });
 
-            doc.save(`Sponsor_Report_${sponsorName.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`);
+            doc.save(`${safeFilename}_Sponsor_Report_${sponsorName.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`);
             toast.success("Report generated successfully");
         } catch (err: any) {
             toast.error("Failed to generate PDF: " + err.message);

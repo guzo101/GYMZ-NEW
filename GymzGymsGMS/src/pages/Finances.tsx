@@ -41,7 +41,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { addBrandedHeader } from "@/lib/pdfBranding";
+import { addBrandedHeader, fetchGymNameForReport } from "@/lib/pdfBranding";
 import { fetchGymPlans } from "@/services/gymPricing";
 
 // Zambia Kwacha currency formatter
@@ -329,12 +329,16 @@ export default function Finances() {
   const exportToPDF = async () => {
     setExporting(true);
     try {
+      const gymName = await fetchGymNameForReport(user?.gymId || (user as any)?.gym_id);
+      const safeFilename = gymName.replace(/[^a-zA-Z0-9_-]/g, '_');
+
       // Use any to avoid type check errors on the instance
       const doc = new jsPDF('p', 'mm', 'a4') as any;
       const pageWidth = doc.internal.pageSize.getWidth();
 
       const subtitle = `Range: ${dateRange.toUpperCase()} (${format(subDays(new Date(), dateRange === '7d' ? 7 : 30), 'MMM dd')} - ${format(new Date(), 'MMM dd')})`;
-      const startY = await addBrandedHeader(doc, 'Gymz FINANCE REPORT', subtitle);
+      const generatedBy = user?.name || user?.email || 'Admin';
+      const startY = addBrandedHeader(doc, gymName, 'Finance Report', subtitle, generatedBy);
 
       // Summary Table
       doc.setTextColor(0, 0, 0);
@@ -401,7 +405,7 @@ export default function Finances() {
         styles: { fontSize: 8 }
       });
 
-      doc.save(`Gymz_Finance_Report_${format(new Date(), 'yyyyMMdd')}.pdf`);
+      doc.save(`${safeFilename}_Finance_Report_${format(new Date(), 'yyyyMMdd')}.pdf`);
 
       toast({
         title: "Report Generated",

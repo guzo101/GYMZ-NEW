@@ -1,0 +1,18 @@
+# Static Gymz site (Vite/React) — not WordPress.
+# Upload the whole dist/ folder including this file to your domain root.
+
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteBase /
+
+# Optional: /privacy → /privacy/ so the privacy folder’s index.html is used
+RewriteRule ^privacy$ /privacy/ [R=301,L]
+
+# Serve real files and folders (CSS, JS, images, privacy/index.html, etc.)
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Everything else → SPA shell (React Router handles /privacy etc.)
+RewriteRule . /index.html [L]
+</IfModule>

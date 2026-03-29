@@ -26,39 +26,39 @@ export type Testimonial = {
 
 export const offerHighlights: OfferHighlight[] = [
   {
-    title: "Day Pass",
-    description: "Perfect for travelers or those who want to try us out with no commitment.",
-    priceLabel: "Configured per gym",
-    ctaLabel: "Get a pass",
-    perks: ["Full gym access", "Locker access", "No signup fees"],
+    title: "Single location",
+    description: "Launch at one gym with core operations.",
+    priceLabel: "Scope on call",
+    ctaLabel: "Book demo",
+    perks: ["Core setup", "Owner/coach/member workflows", "Go-live support"],
   },
   {
-    title: "Basic Membership",
-    description: "All-access training for individuals looking for a consistent routine and results.",
-    priceLabel: "Configured per gym",
-    ctaLabel: "Get started",
-    perks: ["Unlimited gym access", "Standard equipment", "Basic tracking"],
+    title: "Growing operator",
+    description: "Scale operations without adding chaos.",
+    priceLabel: "Scope on call",
+    ctaLabel: "Book demo",
+    perks: ["Team onboarding", "Useful reporting", "Phased rollout"],
   },
   {
-    title: "Couple Membership",
-    description: "Train together and stay motivated with our discounted partner plan.",
-    priceLabel: "Configured per gym",
-    ctaLabel: "Join as a couple",
-    perks: ["Access for 2 people", "Unlimited classes", "1 Guest pass / month"],
+    title: "Multiple branches",
+    description: "One view across all locations.",
+    priceLabel: "Scope on call",
+    ctaLabel: "Book demo",
+    perks: ["Multi-site configuration", "Central oversight", "Branch-by-branch deployment"],
   },
   {
-    title: "Family Membership",
-    description: "The ultimate fitness plan for the whole family (up to 5 members).",
-    priceLabel: "Configured per gym",
-    ctaLabel: "Register family",
-    perks: ["Access for 5 members", "Family dashboard", "Priority booking"],
+    title: "Connected equipment",
+    description: "Optional machine data where compatible.",
+    priceLabel: "Site-dependent",
+    ctaLabel: "Book demo",
+    perks: ["Compatibility check", "Retrofit planning", "Data your coaches can use"],
   },
   {
-    title: "Corporate Plans",
-    description: "Tailored packages for teams that want healthier staff and better energy.",
+    title: "Larger chains",
+    description: "Custom rollout for larger operators.",
     priceLabel: "Custom",
-    ctaLabel: "Book a walkthrough",
-    perks: ["Flexible group rates", "Onboarding support", "Usage reports"],
+    ctaLabel: "Book demo",
+    perks: ["Tailored implementation", "Priority support", "Account planning"],
   },
 ];
 
@@ -70,45 +70,46 @@ export const facilityHighlights: FacilityHighlight[] = [
 ];
 
 export const communityMetrics: CommunityMetric[] = [
-  { label: "Average Member Stay", value: "18+ mo", helper: "members that actually stick" },
-  { label: "Sessions / Month", value: "12.4", helper: "per active member" },
-  { label: "Coach Ratio", value: "1:8", helper: "you won’t get lost in the crowd" },
-  { label: "Check‑In Time", value: "< 60s", helper: "front desk system, no chaos" },
+  { label: "Payments & renewals", value: "One place", helper: "see who is current" },
+  { label: "Attendance", value: "Visible", helper: "spot drop-off early" },
+  { label: "At-risk members", value: "Earlier", helper: "act sooner" },
+  { label: "Nutrition support", value: "Your brand", helper: "inside your ecosystem" },
 ];
 
+/** Value pillars (not customer testimonials—replace with verified quotes when available). */
 export const testimonials: Testimonial[] = [
   {
-    name: "Mwaba",
-    role: "Member",
-    quote: "I dropped 9kg in 12 weeks and actually know what to do when I walk in.",
+    name: "Owner",
+    role: "Revenue & clarity",
+    quote: "Know who is paid, active, and at risk in one view.",
   },
   {
-    name: "Thandi",
-    role: "Busy professional",
-    quote: "The plan is simple, the sessions are hard, and I’m in and out in under an hour.",
+    name: "Coach",
+    role: "Time & delivery",
+    quote: "Less admin, more coaching time.",
   },
   {
-    name: "Zuri Health",
-    role: "Corporate partner",
-    quote: "Our team shows up more, complains less and the reports are clear.",
+    name: "Member",
+    role: "Daily habit",
+    quote: "Guidance tied to the gym they joined.",
   },
 ];
 
 export const contactChannels = [
   {
-    label: "Visit",
-    detail: "Plot 21, Acacia Park, Lusaka",
-    helper: "Open daily • 5am – 10pm",
+    label: "Website",
+    detail: "gymzandnutrition.com",
+    helper: "Official site",
   },
   {
     label: "Call",
-    detail: "+260 97 000 0000",
-    helper: "Front desk replies fast",
+    detail: "+260 960 613 290",
+    helper: "Quick response",
   },
   {
     label: "Email",
-    detail: "support.gymz@gmail.com",
-    helper: "Replies within 1 business hour",
+    detail: "support@gymzandnutrition.com",
+    helper: "Reply within a few minutes",
   },
 ];
 

@@ -1,0 +1,32 @@
+---
+description: Require verification and reasoning; never assume or guess. Reduces code errors.
+alwaysApply: true
+---
+
+# Precision and no guessing
+
+When writing or changing code:
+
+## Verify, don't assume
+
+- **Never guess** types, API shapes, file paths, or behavior. If unsure, **search or read the codebase** first (use grep, read_file, codebase_search).
+- **Confirm existence** before using: e.g. check that a function, type, or env var exists and matches how you plan to use it.
+- **Prefer @-mentions**: When the user asks for a change, encourage or use `@path/to/file` so edits are grounded in real code.
+
+## Reason before acting
+
+- **State reasoning** briefly before making edits (e.g. "X exists in file Y, so I'll import from there" or "The API returns Z, so the type should be …").
+- **One source of truth**: Prefer reading the actual file/API over inferring from memory or naming.
+- If something is ambiguous or missing, **ask the user** or **search** instead of inventing.
+
+## Reduce code errors
+
+- After editing, **run linter** on changed files when relevant (`read_lints`).
+- **Match existing style** in the file (imports, naming, patterns) rather than introducing new conventions.
+- For refactors or renames, **find all usages** (grep/search) before changing so nothing is left broken.
+
+## Short prompt reminders you can use
+
+- "Don't assume; verify against the codebase first."
+- "Reason step by step before editing."
+- "Only change what we discussed; don't guess the rest."

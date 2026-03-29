@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Montserrat:wght@200;300;400&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -8,85 +10,104 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    --background: 248 5% 99%;
-    --foreground: 222.2 84% 4.9%;
+    /*
+      Brand palette (harmonized):
+      Forest #1E5921 → primary | Gold #F3CB49 → secondary | Amber #FFDC68 → accent | Cream #F9E3A2 → cream
+    */
+    --background: 46 45% 97%;
+    --foreground: 122 22% 14%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 122 22% 14%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 122 22% 14%;
 
-    --primary: 120 28% 23%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 122 49% 23%;
+    --primary-foreground: 46 40% 98%;
 
-    --secondary: 47 87% 59%;
-    --secondary-foreground: 120 28% 10%;
+    --secondary: 45 88% 62%;
+    --secondary-foreground: 122 50% 16%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 46 35% 93%;
+    --muted-foreground: 122 14% 38%;
 
-    --accent: 47 95% 67%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 48 100% 70%;
+    --accent-foreground: 122 50% 16%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 120 28% 23%;
+    --border: 46 28% 88%;
+    --input: 46 28% 88%;
+    --ring: 122 49% 23%;
 
     --radius: 0.75rem;
 
-    --sidebar-background: 248 5% 100%;
-    --sidebar-foreground: 0 0% 10%;
-    --sidebar-primary: 120 28% 23%;
+    /* Hero / large surfaces: deeper forest stops (same hue as primary) */
+    --primary-hero-via: 122 44% 18%;
+    --primary-hero-to: 122 48% 12%;
+
+    /* Pale cream — panels, subtle fills */
+    --cream: 46 86% 81%;
+
+    --sidebar-background: 46 40% 98%;
+    --sidebar-foreground: 122 22% 12%;
+    --sidebar-primary: 122 49% 23%;
     --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 47 87% 95.9%;
-    --sidebar-accent-foreground: 120 28% 10%;
-    --sidebar-border: 120 28% 91%;
-    --sidebar-ring: 120 28% 23%;
+    --sidebar-accent: 46 55% 94%;
+    --sidebar-accent-foreground: 122 50% 16%;
+    --sidebar-border: 46 30% 90%;
+    --sidebar-ring: 122 49% 23%;
+
+    /* Section eyebrows: forest-tinted (pairs with Montserrat treatment) */
+    --section-eyebrow: 122 32% 38%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    --background: 122 35% 8%;
+    --foreground: 46 40% 96%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 122 28% 11%;
+    --card-foreground: 46 40% 96%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 122 28% 11%;
+    --popover-foreground: 46 40% 96%;
 
-    --primary: 120 60% 30%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 122 42% 48%;
+    --primary-foreground: 122 50% 8%;
 
-    --primary: 120 28% 30%;
-    --primary-foreground: 0 0% 100%;
+    --secondary: 45 88% 58%;
+    --secondary-foreground: 122 50% 12%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --muted: 122 22% 18%;
+    --muted-foreground: 46 25% 72%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 48 90% 62%;
+    --accent-foreground: 122 50% 12%;
 
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 120 28% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 120 28% 30%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 120 20% 20%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 120 15% 25%;
-    --sidebar-ring: 120 28% 23%;
+    --border: 122 22% 20%;
+    --input: 122 22% 20%;
+    --ring: 122 42% 48%;
+
+    --primary-hero-via: 122 38% 14%;
+    --primary-hero-to: 122 42% 10%;
+
+    --cream: 46 35% 22%;
+
+    --sidebar-background: 122 32% 9%;
+    --sidebar-foreground: 46 40% 95%;
+    --sidebar-primary: 122 42% 48%;
+    --sidebar-primary-foreground: 122 50% 8%;
+    --sidebar-accent: 122 25% 16%;
+    --sidebar-accent-foreground: 46 40% 92%;
+    --sidebar-border: 122 22% 18%;
+    --sidebar-ring: 122 42% 48%;
+
+    --section-eyebrow: 46 35% 72%;
   }
 }
 
@@ -97,13 +118,28 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", sans-serif;
+    font-family: "Manrope", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     font-weight: 400;
     font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  h1, h2, h3, h4, h5, h6, button, input, textarea, select {
+    font-family: "Manrope", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
 }
 
 @layer utilities {
+
+  /* Premium section eyebrow: Montserrat light, wide tracking, brand tint */
+  .text-section-eyebrow {
+    font-family: "Montserrat", system-ui, sans-serif;
+    font-weight: 300;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    color: hsl(var(--section-eyebrow));
+  }
 
   /* Modern shadow utilities */
   .shadow-modern {

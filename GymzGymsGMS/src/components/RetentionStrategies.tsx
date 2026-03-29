@@ -68,12 +68,19 @@ export const RetentionStrategies = ({ retention }: RetentionStrategiesProps) => 
     const [selectedWinbackTemplateId, setSelectedWinbackTemplateId] = useState("noticed");
     const [aiEnabled, setAiEnabled] = useState(false);
     const [generatingAi, setGeneratingAi] = useState(false);
+    const [renewalDraftMessage, setRenewalDraftMessage] = useState(RENEWAL_TEMPLATES[0]?.text ?? "");
+    const [winbackDraftMessage, setWinbackDraftMessage] = useState(WINBACK_TEMPLATES[0]?.text ?? "");
     const [outreachModal, setOutreachModal] = useState({
         open: false,
         type: "", // 'renewal' or 'winback'
         message: "",
         isAiGenerated: false
     });
+    const [reviewModal, setReviewModal] = useState<{
+        open: boolean;
+        type: "renewal" | "winback";
+        search: string;
+    }>({ open: false, type: "renewal", search: "" });
     const [memberPickerModal, setMemberPickerModal] = useState<{
         open: boolean;
         type: "renewal" | "winback";
@@ -87,6 +94,8 @@ export const RetentionStrategies = ({ retention }: RetentionStrategiesProps) => 
     // Targets we're sending to (can come from filtered list OR from "choose from all" picker)
     const [renewalTargets, setRenewalTargets] = useState<any[]>([]);
     const [winbackTargets, setWinbackTargets] = useState<any[]>([]);
+    const [renewalSelectionSource, setRenewalSelectionSource] = useState<"segment" | "custom">("segment");
+    const [winbackSelectionSource, setWinbackSelectionSource] = useState<"segment" | "custom">("segment");
 
     useEffect(() => {
         fetchRetentionData();
@@ -102,6 +111,10 @@ export const RetentionStrategies = ({ retention }: RetentionStrategiesProps) => 
             const today = new Date();
             const next7Days = addDays(today, 7);
             const past7Days = subDays(today, 7);
+            // IMPORTANT: `renewal_due_date` is a DATE column; filters must use YYYY-MM-DD strings.
+            const todayStr = format(today, "yyyy-MM-dd");
+            const next7DaysStr = format(next7Days, "yyyy-MM-dd");
+            const past7DaysStr = format(past7Days, "yyyy-MM-dd");
 
             // Get members expiring in next 7 days
             const { data: expiring } = await supabase
@@ -110,8 +123,8 @@ export const RetentionStrategies = ({ retention }: RetentionStrategiesProps) => 
                 .eq("role", "member")
                 .eq("membership_status", "Active")
                 .eq("gym_id", user.gymId)
-                .gte("renewal_due_date", today.toISOString())
-                .lte("renewal_due_date", next7Days.toISOString())
+                .gte("renewal_due_date", todayStr)
+                .lte("renewal_due_date", next7DaysStr)
                 .order("renewal_due_date", { ascending: true });
 
             // Get members expired in last 7 days
@@ -121,8 +134,8 @@ export const RetentionStrategies = ({ retention }: RetentionStrategiesProps) => 
                 .eq("role", "member")
                 .eq("membership_status", "Inactive")
                 .eq("gym_id", user.gymId)
-                .gte("renewal_due_date", past7Days.toISOString())
-                .lt("renewal_due_date", today.toISOString())
+                .gte("renewal_due_date", past7DaysStr)
+                .lt("renewal_due_date", todayStr)
                 .order("renewal_due_date", { ascending: false });
 
             //Get inactive members (not Active)
@@ -139,16 +152,101 @@ export const RetentionStrategies = ({ retention }: RetentionStrategiesProps) => 
             setInactiveMembers(inactive || []);
             setRenewalTargets(expiring || []);
             setWinbackTargets(expired || []);
+            setRenewalSelectionSource("segment");
+            setWinbackSelectionSource("segment");
 
             // Default select all for convenience
             setSelectedExpiring((expiring || []).map(m => m.id));
             setSelectedExpired((expired || []).map(m => m.id));
+            // Set initial drafts to match currently selected template
+            setRenewalDraftMessage(
+                RENEWAL_TEMPLATES.find((t) => t.id === selectedRenewalTemplateId)?.text ??
+                RENEWAL_TEMPLATES[0]?.text ??
+                ""
+            );
+            setWinbackDraftMessage(
+                WINBACK_TEMPLATES.find((t) => t.id === selectedWinbackTemplateId)?.text ??
+                WINBACK_TEMPLATES[0]?.text ??
+                ""
+            );
         } catch (error) {
             console.error("Error fetching retention data:", error);
         } finally {
             setLoading(false);
         }
     }
+
+    const getSelectedTargets = (type: "renewal" | "winback") => {
+        if (type === "renewal") {
+            const selectedSet = new Set(selectedExpiring);
+            return renewalTargets.filter((m) => selectedSet.has(m.id));
+        }
+        const selectedSet = new Set(selectedExpired);
+        return winbackTargets.filter((m) => selectedSet.has(m.id));
+    };
+
+    const getDraftText = (type: "renewal" | "winback") => (type === "renewal" ? renewalDraftMessage : winbackDraftMessage);
+
+    const firstNameFromMember = (member: any) => {
+        const raw = (member?.name || "").trim();
+        if (!raw) return "friend";
+        return raw.split(" ")[0] || "friend";
+    };
+
+    const selectedUsersMentionList = (type: "renewal" | "winback") => {
+        const selected = getSelectedTargets(type);
+        const names = selected
+            .map((m: any) => firstNameFromMember(m))
+            .filter(Boolean);
+        const unique = Array.from(new Set(names));
+        if (unique.length === 0) return "@selectedUsers";
+        return unique.map((n) => `@${n}`).join(" ");
+    };
+
+    const personalizeMessage = (rawMessage: string, type: "renewal" | "winback", member: any) => {
+        const firstName = firstNameFromMember(member);
+
+        let daysUntilExpiry = 7;
+        if (type === "renewal") {
+            daysUntilExpiry = member?.renewal_due_date
+                ? Math.ceil(
+                    (new Date(member.renewal_due_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+                )
+                : 7;
+        }
+
+        let discountMsg = "";
+        if (type === "winback") {
+            if (selectedDiscount === "10") discountMsg = " I've set up 10% off if you rejoin today.";
+            if (selectedDiscount === "20") discountMsg = " Rejoin today and I'll give you 20% off.";
+            if (selectedDiscount === "freeweek") discountMsg = " Come in for a free week on me.";
+        }
+
+        // 1) Replace @selectedUsers token (same for all recipients)
+        const selectedMentions = selectedUsersMentionList(type);
+        let msg = (rawMessage || "").replace(/@selectedUsers\b/gi, selectedMentions);
+
+        // 2) Replace {{}} placeholders (backwards compatible)
+        msg = msg
+            .replace(/{{name}}/g, firstName)
+            .replace(/{{days}}/g, daysUntilExpiry.toString())
+            .replace(/{{discount}}/g, discountMsg);
+
+        // 3) Replace any other @something mention with @<this recipient first name>
+        // (Keeps @selectedUsers already expanded above)
+        msg = msg.replace(/@([a-zA-Z][\w-]*)/g, (full, tag) => {
+            if (String(tag).toLowerCase() === "selectedusers") return full;
+            return `@${firstName}`;
+        });
+
+        return msg;
+    };
+
+    const openReviewModal = (type: "renewal" | "winback") => {
+        const selectedCount = type === "renewal" ? selectedExpiring.length : selectedExpired.length;
+        if (selectedCount === 0) return;
+        setReviewModal({ open: true, type, search: "" });
+    };
 
     async function confirmSendRenewal() {
         setSendingReminders(true);
@@ -157,23 +255,17 @@ export const RetentionStrategies = ({ retention }: RetentionStrategiesProps) => 
             const targets = renewalTargets.filter(m => selectedExpiring.includes(m.id));
 
             for (const member of targets) {
-                const firstName = member.name ? member.name.split(' ')[0] : 'friend';
-                const daysUntilExpiry = member.renewal_due_date
-                    ? Math.ceil(
-                        (new Date(member.renewal_due_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
-                    )
-                    : 7;
-
-                // Replace placeholders
-                const finalMessage = outreachModal.message
-                    .replace(/{{name}}/g, firstName)
-                    .replace(/{{days}}/g, daysUntilExpiry.toString());
+                const finalMessage = personalizeMessage(outreachModal.message, "renewal", member);
 
                 const { error } = await supabase
                     .from("notifications")
                     .insert({
                         user_id: member.id,
                         gym_id: user?.gymId ?? undefined,
+                        sender_id: user?.id ?? undefined,
+                        sender_type: "admin",
+                        sender_name: user?.name || user?.email || "Admin",
+                        title: user?.name || "Admin",
                         message: finalMessage,
                         type: "renewal_reminder",
                         read: false
@@ -215,22 +307,17 @@ export const RetentionStrategies = ({ retention }: RetentionStrategiesProps) => 
             const targets = winbackTargets.filter(m => selectedExpired.includes(m.id));
 
             for (const member of targets) {
-                const firstName = member.name ? member.name.split(' ')[0] : 'friend';
-
-                let discountMsg = "";
-                if (selectedDiscount === "10") discountMsg = " I've set up 10% off if you rejoin today.";
-                if (selectedDiscount === "20") discountMsg = " Rejoin today and I'll give you 20% off.";
-                if (selectedDiscount === "freeweek") discountMsg = " Come in for a free week on me.";
-
-                const finalMessage = outreachModal.message
-                    .replace(/{{name}}/g, firstName)
-                    .replace(/{{discount}}/g, discountMsg);
+                const finalMessage = personalizeMessage(outreachModal.message, "winback", member);
 
                 const { error } = await supabase
                     .from("notifications")
                     .insert({
                         user_id: member.id,
                         gym_id: user?.gymId ?? undefined,
+                        sender_id: user?.id ?? undefined,
+                        sender_type: "admin",
+                        sender_name: user?.name || user?.email || "Admin",
+                        title: user?.name || "Admin",
                         message: finalMessage,
                         type: "win_back",
                         read: false
@@ -291,13 +378,26 @@ export const RetentionStrategies = ({ retention }: RetentionStrategiesProps) => 
         if (!defaultMsg) {
             if (type === 'renewal') {
                 const tid = templateId || selectedRenewalTemplateId;
-                defaultMsg = RENEWAL_TEMPLATES.find(t => t.id === tid)?.text || RENEWAL_TEMPLATES[0].text;
-                if (templateId) setSelectedRenewalTemplateId(templateId);
+                const next = RENEWAL_TEMPLATES.find(t => t.id === tid)?.text || RENEWAL_TEMPLATES[0].text;
+                defaultMsg = templateId ? next : (renewalDraftMessage || next);
+                if (templateId) {
+                    setSelectedRenewalTemplateId(templateId);
+                    setRenewalDraftMessage(next);
+                }
             } else {
                 const tid = templateId || selectedWinbackTemplateId;
-                defaultMsg = WINBACK_TEMPLATES.find(t => t.id === tid)?.text || WINBACK_TEMPLATES[0].text;
-                if (templateId) setSelectedWinbackTemplateId(templateId);
+                const next = WINBACK_TEMPLATES.find(t => t.id === tid)?.text || WINBACK_TEMPLATES[0].text;
+                defaultMsg = templateId ? next : (winbackDraftMessage || next);
+                if (templateId) {
+                    setSelectedWinbackTemplateId(templateId);
+                    setWinbackDraftMessage(next);
+                }
             }
+        }
+
+        if (defaultMsg && isAi) {
+            if (type === "renewal") setRenewalDraftMessage(defaultMsg);
+            if (type === "winback") setWinbackDraftMessage(defaultMsg);
         }
 
         setOutreachModal({
@@ -373,7 +473,15 @@ export const RetentionStrategies = ({ retention }: RetentionStrategiesProps) => 
                                 <div className="w-7 h-7 flex items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary-foreground/20 shadow-md shrink-0">
                                     <Calendar className="h-3 w-3 text-white" />
                                 </div>
-                                <h4 className="text-sm font-bold text-primary">Expiring Soon (7 Days)</h4>
+                                <div className="flex items-center gap-2">
+                                    <h4 className="text-sm font-bold text-primary">Expiring Soon (7 Days)</h4>
+                                    <Badge
+                                        variant="secondary"
+                                        className="text-[10px] px-2 h-5 bg-muted/40 text-muted-foreground border border-border/50"
+                                    >
+                                        {renewalSelectionSource === "custom" ? "Custom list" : "Suggested segment"}
+                                    </Badge>
+                                </div>
                             </div>
                             <label className="flex items-center gap-2 cursor-pointer select-none hover:opacity-90">
                                 <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Select All</span>
@@ -474,6 +582,7 @@ export const RetentionStrategies = ({ retention }: RetentionStrategiesProps) => 
                                         sortBy: "name",
                                         pickerSelectedIds: selectedExpiring.filter(id => ids.has(id))
                                     });
+                                    setRenewalSelectionSource("custom");
                                 }}
                             >
                                 <UserPlus className="h-3.5 w-3.5 mr-2" />
@@ -481,7 +590,14 @@ export const RetentionStrategies = ({ retention }: RetentionStrategiesProps) => 
                             </Button>
                             <Select
                                 value={selectedRenewalTemplateId}
-                                onValueChange={(val) => setSelectedRenewalTemplateId(val)}
+                                onValueChange={(val) => {
+                                    setSelectedRenewalTemplateId(val);
+                                    const next =
+                                        RENEWAL_TEMPLATES.find((t) => t.id === val)?.text ??
+                                        RENEWAL_TEMPLATES[0]?.text ??
+                                        "";
+                                    setRenewalDraftMessage(next);
+                                }}
                             >
                                 <SelectTrigger className="w-full h-9 text-xs bg-background/50 border-input/50 focus:ring-primary/20">
                                     <SelectValue placeholder="Choose Message Template..." />
@@ -492,9 +608,24 @@ export const RetentionStrategies = ({ retention }: RetentionStrategiesProps) => 
                                     ))}
                                 </SelectContent>
                             </Select>
+                            <div className="rounded-lg border border-border/50 bg-muted/20 p-3">
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                                        Message (editable)
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground">
+                                        Use @name, @selectedUsers, {"{{days}}"}
+                                    </span>
+                                </div>
+                                <Textarea
+                                    value={renewalDraftMessage}
+                                    onChange={(e) => setRenewalDraftMessage(e.target.value)}
+                                    className="mt-2 min-h-[90px] bg-background/50 border-border/50 text-foreground text-xs leading-relaxed"
+                                />
+                            </div>
 
                             <Button
-                                onClick={() => openOutreachModal('renewal')}
+                                onClick={() => openReviewModal("renewal")}
                                 disabled={sendingReminders || selectedExpiring.length === 0 || generatingAi}
                                 size="sm"
                                 className="w-full bg-primary hover:bg-primary/90 text-white border-none h-9 text-xs font-semibold shadow-md shadow-primary/10"
@@ -506,7 +637,7 @@ export const RetentionStrategies = ({ retention }: RetentionStrategiesProps) => 
                                 ) : (
                                     <Send className="h-3.5 w-3.5 mr-2" />
                                 )}
-                                {generatingAi ? "AI Drafting..." : `Send Reminders (${selectedExpiring.length})`}
+                                {generatingAi ? "AI Drafting..." : `Review & Send (${selectedExpiring.length})`}
                             </Button>
                         </div>
                     </div>
@@ -521,7 +652,15 @@ export const RetentionStrategies = ({ retention }: RetentionStrategiesProps) => 
                                 <div className="w-7 h-7 flex items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary-foreground/20 shadow-md shrink-0">
                                     <TrendingDown className="h-3 w-3 text-white" />
                                 </div>
-                                <h4 className="text-sm font-bold text-primary">Recently Expired</h4>
+                                <div className="flex items-center gap-2">
+                                    <h4 className="text-sm font-bold text-primary">Recently Expired</h4>
+                                    <Badge
+                                        variant="secondary"
+                                        className="text-[10px] px-2 h-5 bg-muted/40 text-muted-foreground border border-border/50"
+                                    >
+                                        {winbackSelectionSource === "custom" ? "Custom list" : "Suggested segment"}
+                                    </Badge>
+                                </div>
                             </div>
                             <label className="flex items-center gap-2 cursor-pointer select-none hover:opacity-90">
                                 <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Select All</span>
@@ -622,6 +761,7 @@ export const RetentionStrategies = ({ retention }: RetentionStrategiesProps) => 
                                         sortBy: "name",
                                         pickerSelectedIds: selectedExpired.filter(id => ids.has(id))
                                     });
+                                    setWinbackSelectionSource("custom");
                                 }}
                             >
                                 <UserPlus className="h-3.5 w-3.5 mr-2" />
@@ -630,7 +770,14 @@ export const RetentionStrategies = ({ retention }: RetentionStrategiesProps) => 
                             <div className="flex gap-3">
                                 <Select
                                     value={selectedWinbackTemplateId}
-                                    onValueChange={(val) => setSelectedWinbackTemplateId(val)}
+                                    onValueChange={(val) => {
+                                        setSelectedWinbackTemplateId(val);
+                                        const next =
+                                            WINBACK_TEMPLATES.find((t) => t.id === val)?.text ??
+                                            WINBACK_TEMPLATES[0]?.text ??
+                                            "";
+                                        setWinbackDraftMessage(next);
+                                    }}
                                 >
                                     <SelectTrigger className="flex-1 h-9 text-xs bg-background/50 border-input/50 focus:ring-primary/20">
                                         <SelectValue placeholder="Win-back Template" />
@@ -654,9 +801,24 @@ export const RetentionStrategies = ({ retention }: RetentionStrategiesProps) => 
                                     </SelectContent>
                                 </Select>
                             </div>
+                            <div className="rounded-lg border border-border/50 bg-muted/20 p-3">
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                                        Message (editable)
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground">
+                                        Use @name, @selectedUsers, {"{{discount}}"}
+                                    </span>
+                                </div>
+                                <Textarea
+                                    value={winbackDraftMessage}
+                                    onChange={(e) => setWinbackDraftMessage(e.target.value)}
+                                    className="mt-2 min-h-[90px] bg-background/50 border-border/50 text-foreground text-xs leading-relaxed"
+                                />
+                            </div>
 
                             <Button
-                                onClick={() => openOutreachModal('winback')}
+                                onClick={() => openReviewModal("winback")}
                                 disabled={sendingToInactive || selectedExpired.length === 0 || generatingAi}
                                 size="sm"
                                 variant="outline"
@@ -669,7 +831,7 @@ export const RetentionStrategies = ({ retention }: RetentionStrategiesProps) => 
                                 ) : (
                                     <Users className="h-3.5 w-3.5 mr-2" />
                                 )}
-                                {generatingAi ? "AI Drafting..." : `Launch Win-back Campaign (${selectedExpired.length})`}
+                                {generatingAi ? "AI Drafting..." : `Review & Send (${selectedExpired.length})`}
                             </Button>
                         </div>
                     </div>
@@ -690,6 +852,172 @@ export const RetentionStrategies = ({ retention }: RetentionStrategiesProps) => 
                 </div>
             </CardContent>
 
+            {/* Review Recipients Dialog */}
+            <Dialog
+                open={reviewModal.open}
+                onOpenChange={(open) => setReviewModal((prev) => ({ ...prev, open }))}
+            >
+                <DialogContent className="sm:max-w-xl bg-background text-foreground border-border max-h-[85vh] flex flex-col shadow-xl p-6">
+                    <DialogHeader className="space-y-1.5 pb-4 px-2 border-b border-border">
+                        <DialogTitle className="text-lg font-bold text-foreground py-1">
+                            {reviewModal.type === "renewal" ? "Review renewal recipients" : "Review win-back recipients"}
+                        </DialogTitle>
+                        <DialogDescription className="text-sm text-muted-foreground py-1">
+                            Confirm who will receive this message. You can remove anyone before continuing.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="flex flex-col gap-4 py-4 px-2">
+                        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+                            <div className="relative flex-1 w-full">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    placeholder="Search selected members..."
+                                    value={reviewModal.search}
+                                    onChange={(e) => setReviewModal((prev) => ({ ...prev, search: e.target.value }))}
+                                    className="pl-9 h-10 text-sm bg-muted/30 text-foreground border-input focus-visible:ring-2 focus-visible:ring-primary/20"
+                                />
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Badge variant="secondary" className="h-7 px-3 text-xs font-medium">
+                                    {getSelectedTargets(reviewModal.type).length} selected
+                                </Badge>
+                                <Badge
+                                    variant="outline"
+                                    className="h-7 px-3 text-xs font-medium whitespace-nowrap"
+                                >
+                                    {reviewModal.type === "renewal"
+                                        ? (renewalSelectionSource === "custom" ? "Custom list" : "Suggested segment")
+                                        : (winbackSelectionSource === "custom" ? "Custom list" : "Suggested segment")}
+                                </Badge>
+                            </div>
+                        </div>
+
+                        <div className="rounded-lg border border-border/50 bg-muted/20 p-3">
+                            <div className="flex items-center justify-between gap-3">
+                                <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                                    Template preview
+                                </span>
+                                <span className="text-[10px] text-muted-foreground">
+                                    {reviewModal.type === "renewal" ? `Reminders` : `Win-back`} message
+                                </span>
+                            </div>
+                            <p className="mt-2 text-xs text-foreground/80 leading-relaxed line-clamp-3">
+                                {getDraftText(reviewModal.type)}
+                            </p>
+                        </div>
+
+                        <div className="border border-border rounded-xl overflow-hidden bg-muted/20 max-h-[320px] overflow-y-auto custom-scrollbar">
+                            {(() => {
+                                const q = reviewModal.search.trim().toLowerCase();
+                                const selected = getSelectedTargets(reviewModal.type);
+                                const list = selected.filter((m: any) => {
+                                    if (!q) return true;
+                                    const name = (m.name || "").toLowerCase();
+                                    const email = (m.email || "").toLowerCase();
+                                    return name.includes(q) || email.includes(q);
+                                });
+
+                                if (list.length === 0) {
+                                    return (
+                                        <div className="flex flex-col items-center justify-center py-12 px-8 text-center">
+                                            <Search className="h-10 w-10 text-muted-foreground/40 mb-3" />
+                                            <p className="text-sm font-medium text-foreground py-2 px-3">
+                                                {q ? "No selected members match your search" : "No members selected"}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground mt-1 py-1 px-3">
+                                                {q ? "Try a different search term" : "Select at least one member to continue"}
+                                            </p>
+                                        </div>
+                                    );
+                                }
+
+                                return (
+                                    <div className="divide-y divide-border/50">
+                                        {list.map((member: any) => {
+                                            const isSelected =
+                                                reviewModal.type === "renewal"
+                                                    ? selectedExpiring.includes(member.id)
+                                                    : selectedExpired.includes(member.id);
+                                            return (
+                                                <div
+                                                    key={member.id}
+                                                    className={`flex items-center justify-between gap-4 px-4 py-2 transition-colors ${isSelected ? "bg-primary/5" : ""} hover:bg-muted/50`}
+                                                >
+                                                    <label className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer">
+                                                        <Checkbox
+                                                            checked={isSelected}
+                                                            onCheckedChange={(checked) => {
+                                                                const isChecked = checked === true;
+                                                                if (reviewModal.type === "renewal") {
+                                                                    setSelectedExpiring((prev) =>
+                                                                        isChecked ? prev : prev.filter((id) => id !== member.id)
+                                                                    );
+                                                                } else {
+                                                                    setSelectedExpired((prev) =>
+                                                                        isChecked ? prev : prev.filter((id) => id !== member.id)
+                                                                    );
+                                                                }
+                                                            }}
+                                                            className="data-[state=checked]:bg-primary data-[state=checked]:border-primary shrink-0"
+                                                        />
+                                                        <span className="truncate text-sm font-medium text-foreground">
+                                                            {member.name || member.email}
+                                                        </span>
+                                                    </label>
+                                                    <span className="shrink-0 whitespace-nowrap text-right">
+                                                        {member.renewal_due_date ? (
+                                                            <Badge variant="secondary" className="text-[11px] font-medium whitespace-nowrap">
+                                                                {format(new Date(member.renewal_due_date), "MMM d")}
+                                                            </Badge>
+                                                        ) : (
+                                                            <span className="text-xs text-muted-foreground">—</span>
+                                                        )}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                    </div>
+
+                    <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 px-2 border-t border-border">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setReviewModal((prev) => ({ ...prev, open: false }))}
+                            className="w-full sm:w-auto"
+                        >
+                            Back
+                        </Button>
+                        <Button
+                            type="button"
+                            onClick={async () => {
+                                const selectedCount = getSelectedTargets(reviewModal.type).length;
+                                if (selectedCount === 0) {
+                                    toast.error("Select at least one member to continue.");
+                                    return;
+                                }
+                                // Use the on-card editable draft as the message that will be edited/confirmed next.
+                                setOutreachModal((prev) => ({
+                                    ...prev,
+                                    type: reviewModal.type,
+                                    message: getDraftText(reviewModal.type),
+                                    isAiGenerated: false
+                                }));
+                                setReviewModal((prev) => ({ ...prev, open: false }));
+                                setOutreachModal((prev) => ({ ...prev, open: true }));
+                            }}
+                            className="w-full sm:w-auto bg-primary hover:bg-primary/90 font-semibold"
+                        >
+                            Continue to message
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             {/* Outreach Edit Dialog */}
             <Dialog open={outreachModal.open} onOpenChange={(open) => setOutreachModal({ ...outreachModal, open })}>
                 <DialogContent className="sm:max-w-md bg-stone-900 border-stone-800">
@@ -703,7 +1031,7 @@ export const RetentionStrategies = ({ retention }: RetentionStrategiesProps) => 
                                     <Sparkles className="h-3 w-3" /> AI Drafted
                                 </span>
                             ) : "Customize your outreach. "}
-                            Use {"{{name}}"} or {"{{days}}"} to personalize.
+                            Use @name, @selectedUsers, {"{{days}}"}, {"{{discount}}"}.
                         </DialogDescription>
                     </DialogHeader>
 

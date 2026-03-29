@@ -91,6 +91,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Build user from session metadata (no network). Used for instant restore and fallback.
+  function userFromSession(session: { user: any }): User {
+    const u = session.user;
+    return {
+      id: u.id,
+      name: u.user_metadata?.name || u.user_metadata?.first_name || u.email?.split('@')[0] || "",
+      email: u.email || "",
+      role: u.user_metadata?.role || "member",
+      avatarUrl: u.user_metadata?.avatar_url ?? null,
+      gymId: u.user_metadata?.gym_id ?? null,
+      accessMode: u.user_metadata?.access_mode ?? null,
+    };
+  }
+
   useEffect(() => {
     let mounted = true;
 
@@ -102,29 +116,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error) throw error;
 
         if (session?.user) {
-          const profile = await fetchProfile(session.user.id, session.user.email || "");
+          // Session-first: enter app immediately with session metadata (no network wait)
+          const metadataUser = userFromSession(session);
           if (mounted) {
-            if (profile) {
-              setUser(profile);
-            } else {
-              console.warn("[Auth] Using session metadata fallback");
-              setUser({
-                id: session.user.id,
-                name: session.user.user_metadata?.name || session.user.user_metadata?.first_name || session.user.email?.split('@')[0],
-                email: session.user.email || "",
-                role: session.user.user_metadata?.role || "member",
-                avatarUrl: session.user.user_metadata?.avatar_url,
-                gymId: session.user.user_metadata?.gym_id,
-                accessMode: session.user.user_metadata?.access_mode,
-              });
-            }
+            setUser(metadataUser);
+            setLoading(false);
+          }
+          // Fetch full profile in background; update user when done
+          fetchProfile(session.user.id, session.user.email || "").then((profile) => {
+            if (!mounted) return;
+            setUser(profile ?? metadataUser);
+          });
+        } else {
+          if (mounted) {
+            setUser(null);
+            setLoading(false);
           }
         }
       } catch (err) {
         console.error("Auth initialization error:", err);
-        if (mounted) setUser(null);
-      } finally {
-        if (mounted) setLoading(false);
+        if (mounted) {
+          setUser(null);
+          setLoading(false);
+        }
       }
     }
 
@@ -138,27 +152,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }, 10000);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log(`[Auth] Event: ${event}`);
 
       if (session?.user) {
-        const profile = await fetchProfile(session.user.id, session.user.email || "");
+        const metadataUser = userFromSession(session);
         if (mounted) {
-          if (profile) {
-            setUser(profile);
-          } else {
-            setUser({
-              id: session.user.id,
-              name: session.user.user_metadata?.name || session.user.user_metadata?.first_name || session.user.email?.split('@')[0],
-              email: session.user.email || "",
-              role: session.user.user_metadata?.role || "member",
-              avatarUrl: session.user.user_metadata?.avatar_url,
-              gymId: session.user.user_metadata?.gym_id,
-              accessMode: session.user.user_metadata?.access_mode,
-            });
-          }
+          setUser(metadataUser);
           setLoading(false);
         }
+        fetchProfile(session.user.id, session.user.email || "").then((profile) => {
+          if (!mounted) return;
+          setUser(profile ?? metadataUser);
+        });
       } else {
         if (mounted) {
           setUser(null);
@@ -181,6 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = (u: User) => {
     setUser(u);
+    setLoading(false); // User is resolved - don't block on onAuthStateChange's fetchProfile
   };
 
   const logout = async () => {

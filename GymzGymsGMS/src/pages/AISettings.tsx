@@ -62,6 +62,7 @@ export default function AISettings() {
   const [openaiKey, setOpenaiKey] = useState("");
   const [scannerModel, setScannerModel] = useState("gpt-4o");
   const [currentWebhookUrl, setCurrentWebhookUrl] = useState<string | null>(null);
+  const [allSettings, setAllSettings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [description, setDescription] = useState("");
@@ -102,6 +103,12 @@ export default function AISettings() {
   const fetchCurrentSettings = async () => {
     try {
       setLoading(true);
+      const { data: allRows } = await db
+        .from("ai_settings")
+        .select("id, webhook_url, description, is_active, created_at, ai_provider")
+        .order("created_at", { ascending: false });
+      setAllSettings(allRows || []);
+
       const { data, error } = await db
         .from("ai_settings")
         .select("webhook_url, description, auto_reply_enabled, openai_api_key, scanner_model, growth_auto_pilot, growth_frequency_days, system_prompt, capabilities_enabled, ai_provider")
@@ -215,6 +222,77 @@ export default function AISettings() {
     } catch (error: any) {
       console.error("Error saving AI settings:", error);
       toast.error(error.message || "Failed to save AI settings");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Explicit control: activate a specific saved config row (controls which webhook/provider is actually used)
+  const activateConfig = async (id: string) => {
+    try {
+      setSaving(true);
+      const { error: deactErr } = await db
+        .from("ai_settings")
+        .update({ is_active: false })
+        .eq("is_active", true);
+      if (deactErr) throw new Error(deactErr.message);
+
+      const { error: actErr } = await db
+        .from("ai_settings")
+        .update({ is_active: true })
+        .eq("id", id);
+      if (actErr) throw new Error(actErr.message);
+
+      toast.success("Activated AI configuration");
+      await fetchCurrentSettings();
+    } catch (e: any) {
+      console.error("Error activating config:", e);
+      toast.error(e?.message || "Failed to activate configuration");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Save current form as a NEW row and activate it (lets you switch between multiple webhooks without guessing)
+  const handleSaveAsNew = async () => {
+    if (!webhookUrl.trim()) {
+      toast.error("Webhook URL is required");
+      return;
+    }
+
+    try {
+      new URL(webhookUrl);
+    } catch {
+      toast.error("Please enter a valid URL");
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      await db.from("ai_settings").update({ is_active: false }).eq("is_active", true);
+
+      const { error } = await db.from("ai_settings").insert({
+        webhook_url: webhookUrl.trim(),
+        openai_api_key: openaiKey.trim() || null,
+        scanner_model: scannerModel,
+        description: description.trim() || null,
+        is_active: true,
+        auto_reply_enabled: autoReplyEnabled,
+        growth_auto_pilot: growthAutoPilot,
+        growth_frequency_days: growthFrequency,
+        system_prompt: systemPrompt || null,
+        ai_provider: aiProvider,
+        capabilities_enabled: capabilities,
+      });
+
+      if (error) throw new Error(error.message);
+
+      toast.success("Saved new AI configuration and activated it");
+      await fetchCurrentSettings();
+    } catch (e: any) {
+      console.error("Error saving new config:", e);
+      toast.error(e?.message || "Failed to save new configuration");
     } finally {
       setSaving(false);
     }
@@ -373,6 +451,63 @@ export default function AISettings() {
           Configure webhook, system prompt, and AI capabilities
         </p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Code className="h-5 w-5" />
+            Active AI Configuration (No Guessing)
+          </CardTitle>
+          <CardDescription>
+            The app uses exactly one row in <span className="font-mono">ai_settings</span>: the one with <span className="font-mono">is_active = true</span>.
+            Activate the exact webhook/provider you want here.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {allSettings.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No AI configurations found.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs text-muted-foreground border-b">
+                    <th className="py-2 text-left">Active</th>
+                    <th className="py-2 text-left">Provider</th>
+                    <th className="py-2 text-left">Description</th>
+                    <th className="py-2 text-left">Webhook URL</th>
+                    <th className="py-2 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {allSettings.slice(0, 10).map((row) => (
+                    <tr key={row.id}>
+                      <td className="py-2">{row.is_active ? "✅" : ""}</td>
+                      <td className="py-2 font-mono">{row.ai_provider || "make"}</td>
+                      <td className="py-2">{row.description || "—"}</td>
+                      <td className="py-2 font-mono max-w-[520px] truncate" title={row.webhook_url}>
+                        {row.webhook_url}
+                      </td>
+                      <td className="py-2 text-right">
+                        <Button
+                          size="sm"
+                          variant={row.is_active ? "secondary" : "default"}
+                          disabled={saving || row.is_active}
+                          onClick={() => activateConfig(row.id)}
+                        >
+                          {row.is_active ? "Active" : "Activate"}
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="text-xs text-muted-foreground mt-2">
+                Showing latest 10 configs. Use “Save as new config” below to create another selectable webhook.
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Tabs value={mainTab} onValueChange={setMainTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-2">

@@ -91,10 +91,6 @@ export default function MemberDashboard() {
           <h1 className="text-3xl font-bold tracking-tight">
             TrackIt Dashboard
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Welcome back, {memberName}. This is your home base for workouts, nutrition,
-            and progress.
-          </p>
         </div>
         <div className="flex w-full flex-col gap-2 rounded-xl border bg-card p-4 shadow-sm md:w-auto md:min-w-[260px]">
           <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
@@ -170,7 +166,7 @@ export default function MemberDashboard() {
           </TabsContent>
         </Tabs>
       </section>
-    </div>
+    </div >
   );
 }
 

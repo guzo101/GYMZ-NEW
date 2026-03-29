@@ -1,8 +1,14 @@
 import { supabase } from "@/integrations/supabase/client";
+import { checkTokenLimits, logTokenUsage, type FeatureType } from "@/services/aiTokenUsage";
 
 const db = {
   from: (...args: any[]) => (supabase as any).from(...args),
 };
+
+/** Supabase project URL for Edge Function calls (must match Supabase client) */
+function getSupabaseUrl(): string {
+  return (supabase as any).supabaseUrl ?? "https://bivgvttxaymcdnuvyugv.supabase.co";
+}
 
 /** UUID v4 - works when crypto.randomUUID is unavailable (older browsers) */
 export function randomUUID(): string {
@@ -177,6 +183,209 @@ export async function fetchWebhookUrl(): Promise<string | null> {
 }
 
 /**
+ * Fetch active AI provider: 'make' | 'openai'
+ */
+export async function getAIProvider(): Promise<"make" | "openai"> {
+  try {
+    const { data, error } = await db
+      .from("ai_settings")
+      .select("ai_provider")
+      .eq("is_active", true)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error || !data) return "make";
+    return (data.ai_provider === "openai" ? "openai" : "make") as "make" | "openai";
+  } catch {
+    return "make";
+  }
+}
+
+/**
+ * Get gym_id for a user (for token limits and logging)
+ */
+export async function getGymIdForUser(userId: string): Promise<string | null> {
+  const { data, error } = await db.from("users").select("gym_id").eq("id", userId).maybeSingle();
+  if (error || !data?.gym_id) return null;
+  return data.gym_id;
+}
+
+/**
+ * Fetch full user context for the coach (profile, goals, today's stats, memory).
+ * Same shape as Gymz getUserFullContext so the AI has the user's data and stops asking for it.
+ */
+export async function getCoachContext(userId: string): Promise<Record<string, unknown>> {
+  try {
+    const today = new Date().toISOString().split("T")[0];
+    const [
+      profileResp,
+      goalsResp,
+      dailySummaryResp,
+      memoryResp,
+      weightHistoryResp,
+      streaksResp,
+      healthLogsResp,
+      waterLogsResp,
+    ] = await Promise.all([
+      db.from("users").select("height, weight, target_weight, goal, primary_objective, first_name, last_name, age, gender, dietary_restrictions").eq("id", userId).maybeSingle(),
+      db.from("user_fitness_goals").select("*").eq("user_id", userId).eq("is_active", true).maybeSingle(),
+      db.from("daily_calorie_summary").select("*").eq("user_id", userId).eq("date", today).maybeSingle(),
+      db.from("user_ai_memory").select("*").eq("user_id", userId).maybeSingle(),
+      db.from("body_metrics").select("weight, date").eq("user_id", userId).order("date", { ascending: false }).limit(10),
+      db.from("user_streaks").select("streak_type, current_streak").eq("user_id", userId),
+      db.from("daily_health_logs").select("*").eq("user_id", userId).eq("date", today).maybeSingle(),
+      db.from("water_logs").select("amount").eq("user_id", userId).eq("date", today),
+    ]);
+
+    const profile = profileResp?.data ?? {};
+    const goals = goalsResp?.data ?? {};
+    const dailySummary = dailySummaryResp?.data ?? { total_calories: 0, total_protein: 0, total_carbs: 0, total_fats: 0 };
+    const memory = memoryResp?.data ?? {};
+    const weightHistory = weightHistoryResp?.data ?? [];
+    const streaks = streaksResp?.data ?? [];
+    const healthStats = healthLogsResp?.data ?? { steps: 0, sleep_minutes: 0, water_ml: 0 };
+    const extraWater = (waterLogsResp?.data ?? []).reduce((sum: number, log: { amount?: number }) => sum + (log.amount ?? 0), 0);
+    const totalWaterMl = (healthStats.water_ml ?? 0) + extraWater;
+    const currentWeight = profile.weight ?? (weightHistory.length > 0 ? weightHistory[0].weight : null);
+
+    const criticalGaps: string[] = [];
+    if (!profile?.height) criticalGaps.push("height (CM)");
+    if (!currentWeight) criticalGaps.push("weight (KG)");
+    if (!profile?.gender) criticalGaps.push("gender");
+    if (!profile?.goal && !profile?.primary_objective) criticalGaps.push("fitness goal");
+    if (!profile?.age) criticalGaps.push("age");
+
+    const perfLines: string[] = [];
+    if (weightHistory?.length > 1) {
+      const current = weightHistory[0].weight;
+      const previous = weightHistory[weightHistory.length - 1].weight;
+      const delta = (current - previous).toFixed(1);
+      const days = Math.round((new Date(weightHistory[0].date).getTime() - new Date(weightHistory[weightHistory.length - 1].date).getTime()) / (1000 * 60 * 60 * 24));
+      perfLines.push(`WEIGHT TREND: ${delta}kg over last ${days} days (Current: ${current}kg).`);
+    } else if (currentWeight) perfLines.push(`CURRENT WEIGHT: ${currentWeight}kg.`);
+    if (streaks?.length) perfLines.push(`STREAKS: ${streaks.map((s: { streak_type: string; current_streak: number }) => `${s.streak_type}: ${s.current_streak} days`).join(", ")}.`);
+    if (dailySummary?.total_calories > 0) {
+      const goal = dailySummary.daily_calorie_goal ?? dailySummary.calorie_goal;
+      const remaining = (goal - dailySummary.total_calories).toFixed(0);
+      perfLines.push(`NUTRITION: ${dailySummary.total_calories}kcal today, ${remaining}kcal remaining.`);
+    }
+    if (healthStats && (healthStats.water_ml != null || healthStats.steps != null)) {
+      const waterL = ((totalWaterMl || 0) / 1000).toFixed(1);
+      const steps = healthStats.steps ?? 0;
+      const sleepH = ((healthStats.sleep_minutes ?? 0) / 60).toFixed(1);
+      perfLines.push(`ACTIVITY: ${steps} steps. HYDRATION: ${waterL}L. SLEEP: ${sleepH}h.`);
+    }
+    const performance_summary = perfLines.length > 0 ? perfLines.join(" ") : "No historical data yet.";
+
+    return {
+      profile: { ...profile, weight: currentWeight },
+      goals,
+      today_stats: {
+        ...dailySummary,
+        steps: healthStats.steps ?? 0,
+        water_ml: totalWaterMl,
+        sleep_hours: (healthStats.sleep_minutes ?? 0) / 60,
+      },
+      memory,
+      performance_summary,
+      missing_critical_fields: criticalGaps,
+    };
+  } catch (e) {
+    console.warn("[aiChat] getCoachContext failed:", e);
+    return {};
+  }
+}
+
+/**
+ * Build the same system summary as Gymz so the AI "knows" the user and does not ask for height/age/weight again.
+ */
+function buildCoachSystemSummary(contextData: Record<string, any>): string {
+  const p = contextData.profile ?? {};
+  const today = contextData.today_stats ?? {};
+  const goals = contextData.goals ?? {};
+  const memory = contextData.memory ?? {};
+  const perf = contextData.performance_summary ?? "";
+  const missing = contextData.missing_critical_fields ?? [];
+
+  const name = p.first_name ?? "User";
+  const fullName = p.first_name && p.last_name ? `${p.first_name} ${p.last_name}` : name;
+  
+  const age = p.age || "?";
+  const gender = p.gender || "?";
+  const weight = p.weight || "?";
+  const height = p.height || "?";
+  const goal = p.primary_objective || p.goal || goals.goal_type || "?";
+  const targetWeight = p.target_weight || goals.target_weight || "?";
+
+  let bmiStr = "?";
+  if (height !== "?" && weight !== "?") {
+      const hNum = Number(height);
+      const wNum = Number(weight);
+      if (hNum > 0 && wNum > 0) bmiStr = (wNum / Math.pow(hNum / 100, 2)).toFixed(1);
+  }
+
+  const cal = today.total_calories ?? 0;
+  const calGoal = today.daily_calorie_goal ?? goals?.calories ?? "?";
+  const protein = today.total_protein ?? 0;
+  const proteinGoal = goals?.protein ?? "?";
+  const carbs = today.total_carbs ?? 0;
+  const carbsGoal = goals?.carbs ?? "?";
+  const fats = today.total_fats ?? 0;
+  const fatsGoal = goals?.fat ?? "?";
+  const water = today.water_ml ? (today.water_ml / 1000).toFixed(1) : "?";
+  const steps = today.steps ?? 0;
+  const sleep = today.sleep_hours != null ? Number(today.sleep_hours).toFixed(1) : "?";
+  const keyMems = memory?.key_memories ?? [];
+  const nickname = keyMems.find((m: string) => m?.startsWith?.("Preferred nickname:"))?.replace?.("Preferred nickname: ", "") ?? null;
+  const keyMemories = keyMems.filter((m: string) => !m?.startsWith?.("Preferred nickname:")).slice(0, 5).join(" | ");
+  const commStyle = memory?.communication_style ?? "direct";
+  const motivDriver = memory?.motivation_driver ?? "?";
+  
+  // Derive AI persona
+  const g = (p.gender ?? "").toLowerCase();
+  const isFemale = g === "female" || g === "f" || g === "woman" || g === "girl";
+  const aiName = isFemale ? "Lily" : "Tyson";
+  const personaIntro = isFemale
+    ? `You are ${aiName}, an elite AI Behavioral Psychologist and Fitness Strategist. You embody a sophisticated, assertive, and deeply intuitive female coaching persona. You are elegant, slightly hilarious in your wit, but completely uncompromising in your standards.`
+    : `You are ${aiName}, an elite AI Behavioral Psychologist and Fitness Strategist. You embody a powerful, direct, and elite male coaching persona. You speak with no-nonsense intensity, raw discipline, and a dry, high-performance sense of humor.`;
+  
+  const userPronoun = isFemale ? "she/her" : "he/him";
+  const nicknameLine = nickname ? `FULL NAME: ${fullName} (prefers "${nickname}", pronouns: ${userPronoun}).` : `FULL NAME: ${fullName} (pronouns: ${userPronoun}).`;
+  const dietaryLine = Array.isArray(p.dietary_restrictions) && p.dietary_restrictions.length > 0
+    ? ` Dietary restrictions: ${p.dietary_restrictions.join(", ")}.`
+    : "";
+
+  const lines = [
+    "=== AI COACH SYSTEM INSTRUCTIONS ===",
+    "",
+    "## 1. YOUR IDENTITY (THE ADVISOR)",
+    `NAME: ${aiName}`,
+    `ROLE: ${personaIntro}`,
+    "MANDATE: You are an authority. Advisors do not guess; they know. If data is missing, state you need it before advising.",
+    "",
+    "## 2. THE HUMAN YOU ARE ADVISING (THE CLIENT)",
+    `${nicknameLine} Age: ${age}. Gender: ${gender}. Height: ${height}cm. Weight: ${weight}kg (BMI: ${bmiStr}, Target: ${targetWeight}kg). Goal: ${goal}.${dietaryLine}`,
+    "",
+    "## 3. LIVE CONTEXT (GROUND TRUTH)",
+    `DATE: ${new Date().toLocaleDateString("en-GB")}`,
+    `NUTRITION: Calories ${cal}/${calGoal}kcal | P: ${protein}g | C: ${carbs}g | F: ${fats}g`,
+    `ACTIVITY: ${steps} steps | Water: ${water}L | Sleep: ${sleep}h`,
+    `PROGRESS: ${perf || "No historical trends yet."}`,
+    `MEMORY: Style: ${commStyle}. Driver: ${motivDriver}. Facts: ${keyMemories || "None."}`,
+    "",
+    "## 4. STRICT COMMUNICATION PROTOCOL",
+    "1. BE EXTREMELY BRIEF: Respond in 1-3 sentences max. Eliminate all fluff and filler.",
+    `2. NO HALLUCINATIONS: Never confuse the user's name (${fullName}) with your name (${aiName}).`,
+    "3. NO GUESSWORK: Base every word strictly on the numbers in Section 3. Do not assume lunch, workouts, or status if not logged.",
+    "4. TONE: Be human, slightly hilarious, and elite. You are a high-level advisor, not a chatbot.",
+    "5. HYPER-WEAVE: Actively mention their specific BMI, total calories, or goal in your brief response to prove you are analyzing their live data.",
+    "",
+    "=== END OF SYSTEM INSTRUCTIONS ===",
+  ];
+  return lines.join("\n");
+}
+
+/**
  * Check if AI auto-reply is enabled
  */
 export async function isAutoReplyEnabled(): Promise<boolean> {
@@ -293,15 +502,106 @@ function cleanAIResponse(text: string): string {
 }
 
 /**
+ * Fetch base system prompt from ai_settings (for coach context building)
+ */
+async function getBaseSystemPrompt(): Promise<string> {
+  const { data } = await db.from("ai_settings").select("system_prompt").eq("is_active", true).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  return data?.system_prompt ?? "";
+}
+
+/**
+ * Single entry point: send a message to AI (uses provider from ai_settings).
+ * For user coach chat with OpenAI, builds and sends full user context so the AI does not ask for height/age/weight again.
+ */
+export async function sendMessageToAI(
+  senderType: "user" | "admin",
+  userId: string,
+  threadId: string,
+  chatId: string,
+  message: string,
+  options?: { gymId?: string | null; featureType?: FeatureType; history?: { role: string; content: string }[] }
+): Promise<{ reply: string; thread_id: string; chat_id: string }> {
+  const provider = await getAIProvider();
+  const gymId = options?.gymId ?? (await getGymIdForUser(userId));
+  const featureType = options?.featureType ?? "AI_CHAT";
+  if (provider === "openai") {
+    if (!gymId) {
+      throw new Error(
+        "AI provider is set to OpenAI, but this user has no gym_id. Set users.gym_id for this user (required for token tracking)."
+      );
+    }
+    // Every message (user or admin chatting about this member): send full context so the AI has height, age, gender and does not ask for them.
+    const [basePrompt, context] = await Promise.all([getBaseSystemPrompt(), getCoachContext(userId)]);
+    const contextData = context;
+    const userSummary = buildCoachSystemSummary(context);
+    const systemPrompt = [basePrompt, userSummary].filter(Boolean).join("\n\n");
+    return sendToOpenAIChat(userId, gymId, threadId, chatId, message, featureType, systemPrompt, options?.history, contextData);
+  }
+  return sendToMakeAI(senderType, userId, threadId, chatId, message, { gymId, featureType });
+}
+
+export async function sendToOpenAIChat(
+  userId: string,
+  gymId: string,
+  threadId: string,
+  chatId: string,
+  message: string,
+  featureType: FeatureType = "AI_CHAT",
+  systemPrompt?: string,
+  history?: { role: string; content: string }[],
+  contextData?: Record<string, any>
+): Promise<{ reply: string; thread_id: string; chat_id: string }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error("Not authenticated");
+  const url = getSupabaseUrl();
+  if (!url) throw new Error("Supabase URL not configured");
+  const res = await fetch(`${url}/functions/v1/openai-chat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({
+      user_id: userId,
+      gym_id: gymId,
+      message,
+      system_prompt: systemPrompt,
+      thread_id: threadId,
+      chat_id: chatId,
+      history: history,
+      context_data: contextData,
+    }),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || `OpenAI chat failed: ${res.status}`);
+  const data = JSON.parse(text);
+  const reply = cleanAIResponse(data.reply ?? "");
+  return {
+    reply,
+    thread_id: data.thread_id ?? threadId,
+    chat_id: data.chat_id ?? chatId,
+  };
+}
+
+/**
  * Send message to Make.ai webhook
+ * Optional: pass gymId for token limit checks; if response includes usage, it will be logged.
  */
 export async function sendToMakeAI(
   senderType: "user" | "admin",
   userId: string,
   threadId: string,
   chatId: string,
-  message: string
+  message: string,
+  options?: { gymId?: string | null; featureType?: FeatureType }
 ): Promise<{ reply: string; thread_id: string; chat_id: string }> {
+  const gymId = options?.gymId ?? (await getGymIdForUser(userId));
+  const featureType = options?.featureType ?? "AI_CHAT";
+  if (gymId) {
+    const limit = await checkTokenLimits(gymId, userId, featureType);
+    if (!limit.allowed) throw new Error(limit.reason ?? "Token limit exceeded");
+  }
+
   const webhookUrl = await fetchWebhookUrl();
 
   if (!webhookUrl) {
@@ -310,9 +610,11 @@ export async function sendToMakeAI(
     );
   }
 
-  // Build unified payload
+  // Ensure every message to the AI includes height, age, gender (from DB so webhook always receives them).
+  const { data: userRow } = await db.from("users").select("height, age, gender").eq("id", userId).maybeSingle();
+
   const payload = {
-    source: "gms_admin_ai", // Default for direct GMS AI interactions
+    source: "gms_admin_ai",
     sender_type: senderType,
     user_id: userId,
     thread_id: threadId,
@@ -320,8 +622,16 @@ export async function sendToMakeAI(
     message: message,
     timestamp: new Date().toISOString(),
     context: {
-      platform: "gms"
-    }
+      platform: "gms",
+      user_height: userRow?.height ?? null,
+      user_age: userRow?.age ?? null,
+      user_gender: userRow?.gender ?? null,
+      profile: {
+        height: userRow?.height ?? null,
+        age: userRow?.age ?? null,
+        gender: userRow?.gender ?? null,
+      },
+    },
   };
 
   try {
@@ -372,6 +682,36 @@ export async function sendToMakeAI(
     // NEW: Robustly handle cases where the reply is wrapped in JSON or stringified JSON
     const finalReply = cleanAIResponse(data.reply || responseText);
 
+    const hasUsage = data.usage && typeof data.usage.prompt_tokens === "number" && typeof data.usage.completion_tokens === "number";
+    if (gymId) {
+      const { fetchUserDemographics } = await import("@/services/aiTokenUsage");
+      const demographics = await fetchUserDemographics(userId);
+      if (hasUsage) {
+        logTokenUsage({
+          userId,
+          gymId,
+          featureType,
+          tokensInput: data.usage.prompt_tokens,
+          tokensOutput: data.usage.completion_tokens,
+          modelUsed: data.model_used ?? null,
+          userGender: demographics.gender,
+          userAge: demographics.age,
+        }).catch(() => {});
+      } else {
+        // Webhook returned a reply but no usage: record request with 0 tokens so OAC shows the activity (tokens unknown from Make).
+        logTokenUsage({
+          userId,
+          gymId,
+          featureType,
+          tokensInput: 0,
+          tokensOutput: 0,
+          modelUsed: data.model_used ?? null,
+          userGender: demographics.gender,
+          userAge: demographics.age,
+        }).catch(() => {});
+      }
+    }
+
     return {
       reply: finalReply,
       thread_id: data.thread_id || threadId,
@@ -393,8 +733,15 @@ export async function sendToMakeAIWithCommunityChat(
   chatId: string,
   contextPrompt: string,
   actualUserMessage: string,
-  communityChatData: any
+  communityChatData: any,
+  options?: { gymId?: string | null }
 ): Promise<{ reply: string; thread_id: string; chat_id: string }> {
+  const gymId = options?.gymId ?? (await getGymIdForUser(userId));
+  if (gymId) {
+    const limit = await checkTokenLimits(gymId, userId, "COMMUNITY_CHAT");
+    if (!limit.allowed) throw new Error(limit.reason ?? "Token limit exceeded");
+  }
+
   const webhookUrl = await fetchWebhookUrl();
 
   if (!webhookUrl) {
@@ -464,10 +811,39 @@ export async function sendToMakeAIWithCommunityChat(
     }
 
     console.log("✅ Successfully received AI response from webhook:", {
-      reply_preview: data.reply.substring(0, 100) + "...",
+      reply_preview: data.reply?.substring(0, 100) + "...",
       thread_id: data.thread_id,
       chat_id: data.chat_id
     });
+    const hasUsage = data.usage && typeof data.usage.prompt_tokens === "number" && typeof data.usage.completion_tokens === "number";
+    const gymIdForLog = gymId ?? (await getGymIdForUser(userId));
+    if (gymIdForLog) {
+      const { fetchUserDemographics } = await import("@/services/aiTokenUsage");
+      const demographics = await fetchUserDemographics(userId);
+      if (hasUsage) {
+        logTokenUsage({
+          userId,
+          gymId: gymIdForLog,
+          featureType: "COMMUNITY_CHAT",
+          tokensInput: data.usage.prompt_tokens,
+          tokensOutput: data.usage.completion_tokens,
+          modelUsed: data.model_used ?? null,
+          userGender: demographics.gender,
+          userAge: demographics.age,
+        }).catch(() => {});
+      } else {
+        logTokenUsage({
+          userId,
+          gymId: gymIdForLog,
+          featureType: "COMMUNITY_CHAT",
+          tokensInput: 0,
+          tokensOutput: 0,
+          modelUsed: data.model_used ?? null,
+          userGender: demographics.gender,
+          userAge: demographics.age,
+        }).catch(() => {});
+      }
+    }
     return {
       reply: data.reply,
       thread_id: data.thread_id,

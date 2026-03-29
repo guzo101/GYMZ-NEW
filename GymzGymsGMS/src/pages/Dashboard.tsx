@@ -1,5 +1,5 @@
 /* @ts-nocheck */
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { StatsCard } from "@/components/StatsCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -53,6 +53,7 @@ import {
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
+import { fetchGymNameForReport } from '@/lib/pdfBranding';
 import { QuickActions } from "@/components/QuickActions";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
@@ -60,12 +61,32 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RetentionStrategies } from "@/components/RetentionStrategies";
 import { fetchGymPlans } from "@/services/gymPricing";
+import { Skeleton } from "@/components/ui/skeleton";
 
-// Dynamic color palette for plan names (assigns consistent colors by plan name)
-const PLAN_PALETTE = ["#2A4B2A", "#3b82f6", "#ec4899", "#f59e0b", "#8b5cf6", "#06b6d4", "#84cc16", "#f97316"];
-function getPlanColor(planName: string, index: number): string {
-  const hash = planName.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-  return PLAN_PALETTE[(hash + index) % PLAN_PALETTE.length];
+// Maximally distinct colors: no blue/purple/violet cluster - each color clearly different
+const PLAN_PALETTE = [
+  "#2A4B2A",  // dark green (primary)
+  "#DC2626",  // red
+  "#2563EB",  // blue (only one blue)
+  "#CA8A04",  // gold
+  "#FF6B6B",  // coral (replaced violet - was too similar to blue)
+  "#059669",  // emerald
+  "#EA580C",  // orange
+  "#0891B2",  // cyan
+  "#DB2777",  // pink
+  "#65A30D",  // lime
+  "#FF1493",  // hot pink (replaced indigo - was too similar to blue)
+  "#F59E0B",  // amber
+  "#0D9488",  // teal
+  "#BE185D",  // rose
+  "#16A34A",  // green
+  "#C026D3",  // fuchsia
+];
+
+/** Returns color for a plan. Use planColorMap when available so each unique type gets a distinct color. */
+function getPlanColor(planName: string, index: number, planColorMap?: Record<string, string>): string {
+  if (planColorMap?.[planName]) return planColorMap[planName];
+  return PLAN_PALETTE[index % PLAN_PALETTE.length];
 }
 
 // Resolves plan display name from payment: plan_id → gym plan name, else membership_type, else description, else "Other"
@@ -77,6 +98,19 @@ function resolvePlanName(p: any, planMap: Map<string, string>): string {
   if (desc) return desc;
   return "Other";
 }
+
+// Offline-first: dashboard cache key and icon name mapping for serializable recentActivities
+const DASHBOARD_CACHE_PREFIX = "dashboard_cache_";
+function getDashboardCacheKey(gymIdOrUserId: string) {
+  return DASHBOARD_CACHE_PREFIX + gymIdOrUserId;
+}
+const ACTIVITY_ICON_MAP: Record<string, LucideIcon> = {
+  DollarSign,
+  CheckCircle,
+  UserPlus,
+  Bell,
+  Ticket,
+};
 
 export default function Dashboard() {
   const { toast } = useToast();
@@ -103,6 +137,8 @@ export default function Dashboard() {
   const [signupData, setSignupData] = useState([]);
   const [attendanceData, setAttendanceData] = useState([]);
   const [membershipData, setMembershipData] = useState([]);
+  const [genderData, setGenderData] = useState([]);
+  const [ageData, setAgeData] = useState([]);
   const [recentActivities, setRecentActivities] = useState([]);
 
   const [dataLoading, setDataLoading] = useState(true);
@@ -120,6 +156,15 @@ export default function Dashboard() {
 
   const [rawPaymentsData, setRawPaymentsData] = useState([]);
 
+  // Each unique membership type gets a distinct color; same type = same color across charts
+  const planColorMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    membershipData.forEach((item, i) => {
+      map[item.name] = PLAN_PALETTE[i % PLAN_PALETTE.length];
+    });
+    return map;
+  }, [membershipData]);
+
   useEffect(() => {
     if (user?.gymId) {
       sanitizeMembershipStatuses().catch(e => console.error("Error sanitizing:", e));
@@ -127,7 +172,49 @@ export default function Dashboard() {
   }, [user?.gymId]);
 
   useEffect(() => {
-    if (user?.role === "admin") {
+    const cacheKey = user?.gymId ?? user?.id;
+    const isAdminOrStaff = user?.role === "admin" || user?.role === "staff";
+    let isBackgroundRefresh = false;
+    if (isAdminOrStaff && cacheKey) {
+      try {
+        const raw = typeof localStorage !== "undefined" ? localStorage.getItem(getDashboardCacheKey(cacheKey)) : null;
+        if (raw) {
+          const cached = JSON.parse(raw);
+          const rangeMatches = cached?.dateRange === dateRange && !customStartDate && !customEndDate;
+          if (cached && typeof cached.stats === "object" && rangeMatches) {
+            setStats(cached.stats);
+            setRevenueData(cached.revenueData || []);
+            setSignupData(cached.signupData || []);
+            setAttendanceData(cached.attendanceData || []);
+            setMembershipData(cached.membershipData || []);
+            setGenderData(cached.genderData || []);
+            setAgeData(cached.ageData || []);
+            setRawPaymentsData((cached.rawPaymentsData || []).map((p: any) => ({
+              ...p,
+              resolvedDate: p.resolvedDate ? new Date(p.resolvedDate) : p.resolvedDate,
+            })));
+            setGymPlanNames(cached.gymPlanNames || []);
+            setPlanIdToName(cached.planIdToName ? new Map(Object.entries(cached.planIdToName)) : new Map());
+            if (cached.dateRange) setDateRange(cached.dateRange);
+            setRecentActivities((cached.recentActivities || []).map((a: any) => ({
+              id: a.id,
+              type: a.type,
+              title: a.title,
+              subtitle: a.subtitle,
+              time: new Date(a.time),
+              status: a.status,
+              iconColor: a.iconColor || "bg-primary/10 text-primary",
+              icon: ACTIVITY_ICON_MAP[a.iconName] || Bell,
+            })));
+            setDataLoading(false);
+            isBackgroundRefresh = true;
+          }
+        }
+      } catch (_) {
+        // Invalid or missing cache; will fetch below
+      }
+      fetchDashboardData(isBackgroundRefresh);
+    } else if (isAdminOrStaff) {
       fetchDashboardData();
     }
 
@@ -149,6 +236,10 @@ export default function Dashboard() {
         console.log("Real-time: Attendance update received");
         fetchDashboardData();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_logs', filter: `gym_id=eq.${user.gymId}` }, () => {
+        console.log("Real-time: Attendance log update received");
+        fetchDashboardData();
+      })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, () => {
         console.log("Real-time: New notification received");
         fetchDashboardData();
@@ -162,13 +253,13 @@ export default function Dashboard() {
     return () => { channel.unsubscribe(); };
   }, [user?.role, user?.gymId, dateRange, customStartDate, customEndDate]);
 
-  async function fetchDashboardData() {
+  async function fetchDashboardData(isBackgroundRefresh = false) {
     if (!user?.gymId) {
       console.log("Dashboard: No gymId yet, skipping fetch");
       setDataLoading(false);
       return;
     }
-    setDataLoading(true);
+    if (!isBackgroundRefresh) setDataLoading(true);
     try {
       const now = new Date();
 
@@ -227,12 +318,49 @@ export default function Dashboard() {
       const { count: totalMembers } = await supabase.from("users").select("id", { count: "exact", head: true }).eq("role", "member").eq("gym_id", user.gymId);
       const { count: activeMembers } = await supabase.from("users").select("id", { count: "exact", head: true }).eq("role", "member").eq("membership_status", "Active").eq("gym_id", user.gymId);
       const { data: allMembersInRange } = await supabase.from("users").select("created_at").eq("role", "member").eq("gym_id", user.gymId).gte("created_at", startDate.toISOString());
+      const { data: allMembersForDemographics } = await supabase
+        .from("users")
+        .select("gender, age")
+        .eq("role", "member")
+        .eq("gym_id", user.gymId);
 
       const { count: newSignups } = await supabase.from("users").select("id", { count: "exact", head: true }).eq("role", "member").eq("gym_id", user.gymId).gte("created_at", startDate.toISOString());
 
-      // Attendance — map via DataMapper.fromDb so JS accesses camelCase (checkInTime)
-      const { data: rawAttLogs } = await supabase.from("attendance").select("id, check_in_time").eq("gym_id", user.gymId).gte("check_in_time", startDate.toISOString());
-      const attLogs = DataMapper.fromDb<any[]>(rawAttLogs || []);
+      // Attendance (Dashboard):
+      // - Member app writes to `attendance` (check_in_time)
+      // - Admin check-in writes to `attendance_logs` (checkin_time)
+      // Aggregate both so charts reflect all real check-ins.
+      const [{ data: rawAttendance }, { data: rawAttendanceLogs }] = await Promise.all([
+        supabase
+          .from("attendance")
+          // Use FK join to scope by gym via users table.
+          // This keeps trends working even when `attendance.gym_id` is missing or not populated.
+          .select("id, check_in_time, user:users!inner(gym_id)")
+          .eq("user.gym_id", user.gymId)
+          .gte("check_in_time", startDate.toISOString()),
+        supabase
+          .from("attendance_logs")
+          // Same approach for robustness across schema versions/backfills.
+          .select("id, checkin_time, user:users!inner(gym_id)")
+          .eq("user.gym_id", user.gymId)
+          .gte("checkin_time", startDate.toISOString()),
+      ]);
+
+      const attendanceFromMemberApp = (rawAttendance || []).map((row: any) => ({
+        id: row.id,
+        checkInTime: row.check_in_time,
+        source: "attendance",
+      }));
+
+      const attendanceFromAdminCheckin = (rawAttendanceLogs || []).map((row: any) => ({
+        id: row.id,
+        checkInTime: row.checkin_time,
+        source: "attendance_logs",
+      }));
+
+      const attLogs = [...attendanceFromMemberApp, ...attendanceFromAdminCheckin]
+        .filter((l: any) => !!l?.checkInTime)
+        .sort((a: any, b: any) => new Date(b.checkInTime).getTime() - new Date(a.checkInTime).getTime());
 
       // Processing Charts
       const interval = isLargeRange ? eachMonthOfInterval({ start: startDate, end: endDate }) : eachDayOfInterval({ start: startDate, end: endDate });
@@ -280,6 +408,39 @@ export default function Dashboard() {
         mixMap[t] = (mixMap[t] || 0) + 1;
       });
 
+      // Demographics: gender and age distributions from users table
+      const genderCountMap: Record<string, number> = {};
+      const ageBuckets: { label: string; min: number; max: number | null; value: number }[] = [
+        { label: "< 18", min: 0, max: 17, value: 0 },
+        { label: "18-24", min: 18, max: 24, value: 0 },
+        { label: "25-34", min: 25, max: 34, value: 0 },
+        { label: "35-44", min: 35, max: 44, value: 0 },
+        { label: "45-54", min: 45, max: 54, value: 0 },
+        { label: "55+", min: 55, max: null, value: 0 },
+      ];
+
+      (allMembersForDemographics || []).forEach((m: any) => {
+        const rawGender = (m.gender || "").toString().trim();
+        const normalizedGender = rawGender
+          ? rawGender.charAt(0).toUpperCase() + rawGender.slice(1).toLowerCase()
+          : "Unspecified";
+        genderCountMap[normalizedGender] = (genderCountMap[normalizedGender] || 0) + 1;
+
+        const age = typeof m.age === "number" ? m.age : m.age ? Number(m.age) : null;
+        if (age && age > 0) {
+          const bucket = ageBuckets.find(b => (age >= b.min) && (b.max === null || age <= b.max));
+          if (bucket) {
+            bucket.value += 1;
+          }
+        }
+      });
+
+      const genderSeries = Object.entries(genderCountMap).map(([name, value]) => ({ name, value }));
+      const ageSeries = ageBuckets.filter(b => b.value > 0).map(b => ({ name: b.label, value: b.value }));
+
+      setGenderData(genderSeries);
+      setAgeData(ageSeries);
+
       // Recent Activity Aggregation
       const activities = [];
 
@@ -293,6 +454,7 @@ export default function Dashboard() {
           time: p.resolvedDate,
           status: p.resolvedStatus,
           icon: DollarSign,
+          iconName: 'DollarSign',
           iconColor: 'bg-primary/10 text-primary'
         });
       });
@@ -307,6 +469,7 @@ export default function Dashboard() {
           time: new Date(log.checkInTime),
           status: 'success',
           icon: CheckCircle,
+          iconName: 'CheckCircle',
           iconColor: 'bg-primary/10 text-primary'
         });
       });
@@ -321,6 +484,7 @@ export default function Dashboard() {
           time: new Date(u.created_at),
           status: 'pending',
           icon: UserPlus,
+          iconName: 'UserPlus',
           iconColor: 'bg-primary/10 text-primary'
         });
       });
@@ -337,17 +501,22 @@ export default function Dashboard() {
       (adminNotifs || []).forEach((n: any) => {
         const nType = (n.type || "").toLowerCase();
         let icon = Bell;
+        let iconName = "Bell";
         let iconColor = "bg-primary/10 text-primary";
         if (nType.includes("payment")) {
           icon = DollarSign;
+          iconName = "DollarSign";
           iconColor = nType.includes("pending") ? "bg-amber-500/10 text-amber-600" : "bg-primary/10 text-primary";
         } else if (nType.includes("member_signup") || nType.includes("signup")) {
           icon = UserPlus;
+          iconName = "UserPlus";
         } else if (nType.includes("event_signup")) {
           icon = Ticket;
+          iconName = "Ticket";
           iconColor = "bg-emerald-500/10 text-emerald-600";
         } else if (nType.includes("check")) {
           icon = CheckCircle;
+          iconName = "CheckCircle";
         }
         activities.push({
           id: `notif-${n.id}`,
@@ -357,12 +526,14 @@ export default function Dashboard() {
           time: new Date(n.created_at),
           status: "new",
           icon,
+          iconName,
           iconColor,
         });
       });
 
       // Sort and set
-      setRecentActivities(activities.sort((a, b) => b.time.getTime() - a.time.getTime()).slice(0, 15));
+      const sortedActivities = activities.sort((a, b) => b.time.getTime() - a.time.getTime()).slice(0, 15);
+      setRecentActivities(sortedActivities);
 
       setRevenueData(processedRev);
       setAttendanceData(processedAtt);
@@ -377,30 +548,32 @@ export default function Dashboard() {
       // This prevents false 100% retention when no members expired recently
 
       // 1. Get members whose memberships have EXPLICITLY expired
+      // IMPORTANT: `renewal_due_date` is a DATE column; use YYYY-MM-DD (not full ISO timestamps) in filters.
+      const todayStr = format(now, "yyyy-MM-dd");
       const { data: expiredWithDates } = await supabase
         .from("users")
-        .select("id, renewal_due_date, created_at, name, email, membership_type, membership_plan")
+        .select("id, renewal_due_date, created_at, name, email, membership_type")
         .eq("role", "member")
         .eq("gym_id", user.gymId)
         .not("renewal_due_date", "is", null)
-        .lte("renewal_due_date", now.toISOString());
+        .lte("renewal_due_date", todayStr);
 
       // 2. Get members who joined long ago and have NO expiry date
       // We calculate fallback expiry thresholds based on membership type
-      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-      const thirtyDaysAgo = subDays(now, 31).toISOString();
+      const startOfToday = todayStr;
+      const thirtyDaysAgo = format(subDays(now, 31), "yyyy-MM-dd");
 
       // Grabbing all members with NULL expiry to filter them more accurately in JS
       const { data: potentialFallbackLapses } = await supabase
         .from("users")
-        .select("id, name, membership_expiry, created_at, membership_type, membership_plan")
+        .select("id, name, membership_expiry, created_at, membership_type")
         .eq("role", "member")
         .eq("gym_id", user.gymId)
         .is("membership_expiry", null);
 
       const expiredWithoutDates = (potentialFallbackLapses || []).filter(member => {
         const joinDate = member.created_at;
-        const typeStr = (member.membership_type || member.membership_plan || "").toLowerCase();
+        const typeStr = (member.membership_type || "").toLowerCase();
         const isDayPass = typeStr.includes("day");
 
         if (isDayPass) {
@@ -531,23 +704,58 @@ export default function Dashboard() {
         ? (totalRenewed / totalExpired) * 100
         : 0;
 
-      setStats({
+      const statsPayload = {
         totalMembers: totalMembers || 0,
         activeMembers: activeMembers || 0,
         checkinsToday: (attLogs || []).filter(l => format(new Date(l.checkInTime), 'yyyy-MM-dd') === format(now, 'yyyy-MM-dd')).length,
         monthlyRevenue: monthlyRev,
         pendingAmount: pending,
         newSignups: newSignups || 0,
-
-        // NEW: Multiple retention metrics for accurate tracking
-        retention: Math.round(classicRetention), // Primary: renewal-based
+        retention: Math.round(classicRetention),
         activeMemberRate: Math.round(activeMemberRate),
-        churnRate: Math.round(churnRate * 10) / 10, // One decimal
+        churnRate: Math.round(churnRate * 10) / 10,
         renewalRate: Math.round(renewalRate),
         atRiskCount: atRiskMembers?.length || 0,
         expiringThisMonth: expiringThisMonthCount || 0,
         monthlyRevenueTarget
-      });
+      };
+      setStats(statsPayload);
+
+      // Offline-first: persist last successful dashboard response for instant load on next open
+      try {
+        const cacheKey = getDashboardCacheKey(user.gymId ?? user.id);
+        const cachePayload = {
+          stats: statsPayload,
+          revenueData: processedRev,
+          signupData: processedSignup,
+          attendanceData: processedAtt,
+          membershipData: Object.entries(mixMap).map(([name, value]) => ({ name, value })),
+          genderData: genderSeries,
+          ageData: ageSeries,
+          rawPaymentsData: mappedPayments.map((p: any) => ({
+            ...p,
+            resolvedDate: p.resolvedDate?.toISOString?.() ?? p.resolvedDate,
+          })),
+          gymPlanNames: planNames,
+          planIdToName: Object.fromEntries(planMap),
+          dateRange,
+          recentActivities: sortedActivities.map((a: any) => ({
+            id: a.id,
+            type: a.type,
+            title: a.title,
+            subtitle: a.subtitle,
+            time: a.time.toISOString(),
+            status: a.status,
+            iconName: a.iconName || "Bell",
+            iconColor: a.iconColor,
+          })),
+        };
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem(cacheKey, JSON.stringify(cachePayload));
+        }
+      } catch (cacheErr) {
+        console.warn("[Dashboard] Cache write failed:", cacheErr);
+      }
     } catch (e) {
       console.error(e);
       toast({ title: "Data sync issue", description: "Dashboard showing cached data", variant: "destructive" });
@@ -594,6 +802,9 @@ export default function Dashboard() {
   const exportDashboardPDF = async () => {
     setExporting(true);
     try {
+      const gymName = await fetchGymNameForReport(user?.gymId || (user as any)?.gym_id);
+      const safeFilename = gymName.replace(/[^a-zA-Z0-9_-]/g, '_');
+
       const doc = new jsPDF('p', 'mm', 'a4') as any;
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
@@ -602,8 +813,9 @@ export default function Dashboard() {
       const Gymzprimary: [number, number, number] = [42, 75, 42]; // #2A4B2A
       const GymzDarkprimary: [number, number, number] = [27, 46, 27]; // #1B2E1B
       const subtleGray: [number, number, number] = [248, 248, 252];
+      const adminName = user?.name || user?.email || 'Admin';
 
-      const drawHeader = async (pageDoc: any, title: string) => {
+      const drawHeader = (pageDoc: any, title: string) => {
         // Main Header Bar
         pageDoc.setFillColor(...Gymzprimary);
         pageDoc.rect(0, 0, pageWidth, 45, 'F');
@@ -612,42 +824,27 @@ export default function Dashboard() {
         pageDoc.setFillColor(...GymzDarkprimary);
         pageDoc.rect(0, 45, pageWidth, 2, 'F');
 
-        // Logo Integration
-        try {
-          const base = typeof import.meta !== "undefined" && import.meta.env?.BASE_URL ? import.meta.env.BASE_URL : "/";
-          const logoImg = new Image();
-          logoImg.src = `${base}gymzLogo.png`;
-          await new Promise((resolve, reject) => {
-            logoImg.onload = resolve;
-            logoImg.onerror = reject;
-            setTimeout(reject, 1500);
-          });
-
-          const canvas = document.createElement('canvas');
-          canvas.width = logoImg.width;
-          canvas.height = logoImg.height;
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(logoImg, 0, 0);
-          const logoData = canvas.toDataURL('image/png');
-          pageDoc.addImage(logoData, 'PNG', 12, 5, 35, 35);
-        } catch (e) {
-          console.warn('Primary premium logo failed, using fallback typography');
-        }
-
-        // Branding Text
+        // Gym Name (primary, prominent)
         pageDoc.setTextColor(255, 255, 255);
-        pageDoc.setFontSize(26);
+        pageDoc.setFontSize(22);
         pageDoc.setFont(undefined, 'bold');
-        pageDoc.text('Gymz', 52, 22);
+        pageDoc.text(gymName, 15, 18);
 
-        pageDoc.setFontSize(14);
+        // "Powered by Gymz AI" (very subtle)
+        pageDoc.setFontSize(6);
         pageDoc.setFont(undefined, 'normal');
-        pageDoc.text(title.toUpperCase(), 52, 32);
+        pageDoc.setTextColor(150, 170, 150);
+        pageDoc.text('Powered by Gymz AI', 15, 23);
+
+        // Report Title
+        pageDoc.setFontSize(12);
+        pageDoc.setTextColor(255, 255, 255);
+        pageDoc.text(title.toUpperCase(), 15, 32);
 
         // Metadata
         pageDoc.setFontSize(9);
         pageDoc.setTextColor(220, 220, 220);
-        pageDoc.text(`GEN: ${format(new Date(), 'dd MMM yyyy | HH:mm')}`, pageWidth - 15, 20, { align: 'right' });
+        pageDoc.text(`GEN: ${format(new Date(), 'dd MMM yyyy | HH:mm')} by ${adminName}`, pageWidth - 15, 20, { align: 'right' });
         pageDoc.text(`PERIOD: ${dateRange.toUpperCase()}`, pageWidth - 15, 26, { align: 'right' });
       };
 
@@ -659,14 +856,14 @@ export default function Dashboard() {
         pageDoc.setDrawColor(230, 230, 230);
         pageDoc.line(0, pageHeight - 20, pageWidth, pageHeight - 20);
 
-        pageDoc.setTextColor(120, 120, 120);
-        pageDoc.setFontSize(8);
-        pageDoc.text('Gymz GYM MANAGEMENT SYSTEM - OFFICIAL PERFORMANCE RECORD', 15, pageHeight - 10);
+        pageDoc.setTextColor(140, 140, 140);
+        pageDoc.setFontSize(7);
+        pageDoc.text(`Generated by ${adminName}  ·  Powered by Gymz AI`, 15, pageHeight - 10);
         pageDoc.text(`CONFIDENTIAL | Page ${pageNum} of ${total}`, pageWidth - 15, pageHeight - 10, { align: 'right' });
       };
 
       // --- PAGE 1: EXECUTIVE SUMMARY ---
-      await drawHeader(doc, 'Executive Performance Summary');
+      drawHeader(doc, 'Executive Performance Summary');
 
       doc.setTextColor(40, 40, 40);
       doc.setFontSize(16);
@@ -674,12 +871,12 @@ export default function Dashboard() {
       doc.text('Key Business Metrics', 15, 65);
 
       const summaryMetrics = [
-        ['Platform Members', stats.totalMembers.toString()],
-        ['Active Community', stats.activeMembers.toString()],
-        ['Revenue Realized', formatCurrency(stats.monthlyRevenue)],
-        ['Loyalty Retention', `${stats.retention}%`],
-        ['Acquisition Volume', stats.newSignups.toString()],
-        ['Daily Floor Traffic', stats.checkinsToday.toString()]
+        ['Total Members', stats.totalMembers.toString()],
+        ['Active Members', stats.activeMembers.toString()],
+        ['Revenue', formatCurrency(stats.monthlyRevenue)],
+        ['Retention Rate', `${stats.retention}%`],
+        ['New Signups', stats.newSignups.toString()],
+        ['Check-ins Today', stats.checkinsToday.toString()]
       ];
 
       autoTable(doc, {
@@ -714,7 +911,7 @@ export default function Dashboard() {
             });
             const img = canvas.toDataURL('image/png');
             doc.addPage();
-            await drawHeader(doc, 'Detailed Analytics');
+            drawHeader(doc, 'Detailed Analytics');
 
             doc.setTextColor(40, 40, 40);
             doc.setFontSize(16);
@@ -755,7 +952,7 @@ export default function Dashboard() {
         drawFooter(doc, i, totalPages);
       }
 
-      doc.save(`Gymz_Premium_Report_${format(new Date(), 'yyyyMMdd_HHmm')}.pdf`);
+      doc.save(`${safeFilename}_Premium_Report_${format(new Date(), 'yyyyMMdd_HHmm')}.pdf`);
       toast({ title: "Premium Report Ready", description: "Your high-fidelity performance statement has been generated." });
     } catch (e) {
       console.error("Dashboard PDF Error:", e);
@@ -773,7 +970,40 @@ export default function Dashboard() {
     setCustomEndDate(end);
   };
 
-  if (loading || dataLoading) return <div className="flex h-screen items-center justify-center bg-mesh-glow"><RefreshCw className="animate-spin h-8 w-8 text-primary" /></div>;
+  // Auth loading: full-screen spinner (no user yet)
+  if (loading) return <div className="flex h-screen items-center justify-center bg-mesh-glow"><RefreshCw className="animate-spin h-8 w-8 text-primary" /></div>;
+
+  // Data loading: show layout skeleton so dashboard doesn't feel blank
+  if (dataLoading) {
+    return (
+      <div className="space-y-6 p-4 md:p-6 pb-20">
+        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 px-1">
+          <div>
+            <Skeleton className="h-9 w-48 mb-2" />
+            <Skeleton className="h-4 w-32" />
+          </div>
+          <div className="flex gap-3">
+            <Skeleton className="h-11 w-40 rounded-xl" />
+            <Skeleton className="h-11 w-36 rounded-xl" />
+          </div>
+        </div>
+        <Skeleton className="h-24 w-full rounded-xl" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-28 rounded-2xl" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <Skeleton className="lg:col-span-2 h-[420px] rounded-2xl" />
+          <Skeleton className="h-[420px] rounded-2xl" />
+        </div>
+        <div className="flex items-center justify-center gap-2 py-8">
+          <RefreshCw className="h-4 w-4 animate-spin text-primary" />
+          <span className="text-sm text-muted-foreground font-medium">Loading your dashboard...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 p-4 md:p-6 pb-20">
@@ -784,7 +1014,7 @@ export default function Dashboard() {
           </h1>
           <p className="text-xs font-medium text-muted-foreground/70 mt-1.5 flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-            Live performance tracking
+            Live Tracking
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -799,9 +1029,9 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatsCard title="Total Members" value={stats.totalMembers} icon={Users} trend="neutral" />
-        <StatsCard title="Active Check-ins" value={stats.checkinsToday} subtitle="Daily Attendance" icon={CheckCircle} trend="up" />
-        <StatsCard title="Monthly Revenue" value={formatCurrency(stats.monthlyRevenue)} subtitle="Gross Revenue" icon={DollarSign} trend="up" />
-        <StatsCard title="New Growth" value={`+${stats.newSignups}`} subtitle="Member Acquisition" icon={TrendingUp} trend="up" />
+        <StatsCard title="Today's Check-ins" value={stats.checkinsToday} subtitle="Attendance" icon={CheckCircle} trend="up" />
+        <StatsCard title="Monthly Revenue" value={formatCurrency(stats.monthlyRevenue)} subtitle="Revenue" icon={DollarSign} trend="up" />
+        <StatsCard title="New Signups" value={`+${stats.newSignups}`} subtitle="Acquisition" icon={TrendingUp} trend="up" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -810,12 +1040,12 @@ export default function Dashboard() {
             <div className="flex flex-col gap-2">
               <CardTitle className="text-lg font-bold flex items-center gap-2">
                 <Zap className="h-5 w-5 text-yellow-500 fill-yellow-500/20" />
-                {selectedPlan === "All" ? "Revenue Momentum" : `${selectedPlan} Revenue`}
+                {selectedPlan === "All" ? "Revenue Trend" : `${selectedPlan} Revenue`}
               </CardTitle>
               <div className="flex flex-wrap gap-1.5">
                 {(["All", ...new Set([...gymPlanNames, ...membershipData.map(m => m.name)].filter(Boolean))]).map((plan, idx) => {
                   const isActive = selectedPlan === plan;
-                  const color = plan === "All" ? "hsl(var(--primary))" : getPlanColor(plan, idx);
+                  const color = plan === "All" ? "hsl(var(--primary))" : getPlanColor(plan, idx, planColorMap);
                   return (
                     <button
                       key={plan}
@@ -949,8 +1179,8 @@ export default function Dashboard() {
               <AreaChart data={filteredRevenueData}>
                 <defs>
                   <linearGradient id="cDynamic" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={selectedPlan === "All" ? "hsl(var(--primary))" : getPlanColor(selectedPlan, 0)} stopOpacity={0.3} />
-                    <stop offset="95%" stopColor={selectedPlan === "All" ? "hsl(var(--primary))" : getPlanColor(selectedPlan, 0)} stopOpacity={0} />
+                    <stop offset="5%" stopColor={selectedPlan === "All" ? "hsl(var(--primary))" : getPlanColor(selectedPlan, 0, planColorMap)} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={selectedPlan === "All" ? "hsl(var(--primary))" : getPlanColor(selectedPlan, 0, planColorMap)} stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
@@ -960,7 +1190,7 @@ export default function Dashboard() {
                   contentStyle={{ background: 'rgba(0,0,0,0.85)', color: '#fff', borderRadius: '16px', border: 'none', backdropFilter: 'blur(8px)', padding: '12px' }}
                   itemStyle={{ fontWeight: 900 }}
                 />
-                <Area type="monotone" dataKey="amount" stroke={selectedPlan === "All" ? "hsl(var(--primary))" : getPlanColor(selectedPlan, 0)} fill="url(#cDynamic)" strokeWidth={4} fillOpacity={1} />
+                <Area type="monotone" dataKey="amount" stroke={selectedPlan === "All" ? "hsl(var(--primary))" : getPlanColor(selectedPlan, 0, planColorMap)} fill="url(#cDynamic)" strokeWidth={4} fillOpacity={1} />
               </AreaChart>
             </ResponsiveContainer>
           </CardContent>
@@ -989,7 +1219,7 @@ export default function Dashboard() {
                     {membershipData.map((m, i) => (
                       <Cell
                         key={i}
-                        fill={getPlanColor(m.name, i)}
+                        fill={planColorMap[m.name] ?? PLAN_PALETTE[i % PLAN_PALETTE.length]}
                         fillOpacity={selectedPlan === "All" || selectedPlan === m.name ? 1 : 0.2}
                         className="transition-all duration-500"
                       />
@@ -1015,7 +1245,7 @@ export default function Dashboard() {
                   className={`flex items-center gap-3 transition-all cursor-pointer ${selectedPlan !== "All" && selectedPlan !== m.name ? "opacity-30 grayscale" : "opacity-100"}`}
                   onClick={() => setSelectedPlan(m.name === selectedPlan ? "All" : m.name)}
                 >
-                  <div className="w-3 h-3 rounded-full shadow-lg" style={{ backgroundColor: getPlanColor(m.name, i) }} />
+                  <div className="w-3 h-3 rounded-full shadow-lg" style={{ backgroundColor: planColorMap[m.name] ?? PLAN_PALETTE[i % PLAN_PALETTE.length] }} />
                   <div className="flex flex-col">
                     <span className="text-[10px] uppercase font-bold text-muted-foreground/50 tracking-widest leading-none">{m.name}</span>
                     <span className="text-xl font-bold leading-tight tabular-nums">{m.value}</span>
@@ -1027,7 +1257,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="glass-card overflow-hidden">
           <CardHeader><CardTitle className="text-lg">Attendance Trends</CardTitle></CardHeader>
           <CardContent id="att-chart" className="h-[260px] p-5 pt-3">
@@ -1035,22 +1265,74 @@ export default function Dashboard() {
               <AreaChart data={attendanceData}>
                 <defs><linearGradient id="cAtt" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.2} /><stop offset="95%" stopColor="#10b981" stopOpacity={0} /></linearGradient></defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
-                <Tooltip />
-                <Area type="stepBefore" dataKey="count" stroke="#10b981" fill="url(#cAtt)" strokeWidth={3} fillOpacity={1} />
+                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))', fontWeight: 700 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))', fontWeight: 700 }} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{ background: 'rgba(0,0,0,0.85)', color: '#fff', borderRadius: '16px', border: 'none', backdropFilter: 'blur(8px)', padding: '12px' }}
+                  itemStyle={{ fontWeight: 900 }}
+                />
+                <Area type="monotone" dataKey="count" stroke="#10b981" fill="url(#cAtt)" strokeWidth={4} fillOpacity={1} />
               </AreaChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        <Card id="system-summary" className="glass-card bg-gradient-to-br from-primary/[0.02] to-transparent overflow-hidden border-primary/10">
+        <Card className="glass-card overflow-hidden">
+          <CardHeader><CardTitle className="text-lg">Gender Distribution</CardTitle></CardHeader>
+          <CardContent className="h-[260px] p-5 pt-3">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={genderData}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={60}
+                  outerRadius={90}
+                  paddingAngle={4}
+                  stroke="none"
+                >
+                  {genderData.map((g: any, i: number) => (
+                    <Cell
+                      key={g.name}
+                      fill={PLAN_PALETTE[i % PLAN_PALETTE.length]}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{ background: 'rgba(0,0,0,0.85)', border: 'none', borderRadius: '16px', color: '#fff', backdropFilter: 'blur(8px)' }}
+                  itemStyle={{ color: '#fff', fontWeight: 900 }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card overflow-hidden">
+          <CardHeader><CardTitle className="text-lg">Age Distribution</CardTitle></CardHeader>
+          <CardContent className="h-[260px] p-5 pt-3">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={ageData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                <Tooltip />
+                <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                  {ageData.map((a: any, i: number) => (
+                    <Cell key={a.name} fill={PLAN_PALETTE[i % PLAN_PALETTE.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card id="system-summary" className="glass-card bg-gradient-to-br from-primary/[0.02] to-transparent overflow-hidden border-primary/10 lg:col-span-3">
           <CardHeader className="pb-4">
             <CardTitle className="text-lg font-bold flex items-center gap-2">
               <RefreshCw className="h-4 w-4 text-primary" />
               System Vitality
             </CardTitle>
-            <p className="text-[10px] uppercase font-bold text-muted-foreground/60 tracking-widest mt-0.5">Real-time infrastructure health</p>
+            <p className="text-[10px] uppercase font-bold text-muted-foreground/60 tracking-widest mt-0.5">System Health</p>
           </CardHeader>
           <CardContent className="space-y-7">
             <div className="space-y-3">
@@ -1140,7 +1422,7 @@ export default function Dashboard() {
             <TrendingUp className="h-5 w-5 text-primary" />
             Registration Velocity
           </CardTitle>
-          <p className="text-[10px] uppercase font-bold text-muted-foreground/60 tracking-widest">Acquisition flow over time</p>
+          <p className="text-[10px] uppercase font-bold text-muted-foreground/60 tracking-widest">Signups over time</p>
         </CardHeader>
         <CardContent id="signup-chart" className="h-[260px] p-5 pt-3">
           <ResponsiveContainer width="100%" height="100%">
@@ -1163,9 +1445,9 @@ export default function Dashboard() {
         <CardHeader className="border-b border-border/10 bg-muted/5 pb-4">
           <CardTitle className="text-lg font-bold flex items-center gap-2">
             <RefreshCw className="h-4 w-4 text-primary animate-spin-slow" />
-            Activity Stream Audit
+            Activity Log
           </CardTitle>
-          <p className="text-[10px] uppercase font-bold text-muted-foreground/60 tracking-widest">Verified transaction & event log</p>
+          <p className="text-[10px] uppercase font-bold text-muted-foreground/60 tracking-widest">Recent Transactions</p>
         </CardHeader>
         <CardContent className="p-0">
           <div className="divide-y divide-border/10">

@@ -1,0 +1,13 @@
+---
+description: Protect step counter from unintended changes
+alwaysApply: true
+---
+
+# Step Counter Protection
+
+- Do not modify step counting logic, pedometer integrations, step sync jobs,
+  or step UI behavior unless the user explicitly asks for step-counter changes.
+- If a related fix is needed elsewhere (for example calorie calculations),
+  implement it without altering the step counter implementation.
+- Before editing any file that handles steps, confirm that the request
+  explicitly permits step-counter edits.

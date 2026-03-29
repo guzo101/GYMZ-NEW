@@ -59,7 +59,9 @@ export default function Login() {
   // Only redirect if a user is already logged in AND we aren't currently in the middle of a login attempt
   useEffect(() => {
     if (user && !loading) {
-      if (user.role === 'admin' || user.role === 'super_admin') {
+      if (user.role === "platform_admin") {
+        navigate("/oac/website-traffic", { replace: true });
+      } else if (user.role === 'admin' || user.role === 'super_admin') {
         navigate("/dashboard", { replace: true });
       } else if (user.role === 'member') {
         navigate("/member/dashboard", { replace: true });
@@ -161,8 +163,12 @@ export default function Login() {
     setSuccess("");
 
     try {
+      const redirectTo =
+        typeof window !== "undefined" && (window as any).electronAPI?.isElectron
+          ? "gymz://reset-password"
+          : `${window.location.origin}/reset-password`;
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo,
       });
 
       setSuccess(
@@ -237,7 +243,11 @@ export default function Login() {
       throw new Error("Admin profile not found. If you are a member, please use the Member tab.");
     }
 
-    const isAdmin = profile.role === 'admin' || profile.role === 'super_admin' || profile.role === 'staff';
+    const isAdmin =
+      profile.role === "admin" ||
+      profile.role === "super_admin" ||
+      profile.role === "staff" ||
+      profile.role === "platform_admin";
     const hasGym = profile.gym_id !== null && profile.gym_id !== undefined;
 
     if (!isAdmin) {
@@ -245,7 +255,7 @@ export default function Login() {
       throw new Error("ACCESS DENIED: Use the Member login tab.");
     }
 
-    if (!hasGym && profile.role !== 'super_admin') {
+    if (!hasGym && profile.role !== "super_admin" && profile.role !== "platform_admin") {
       // Self-heal: try resolving gym from gym_contacts before rejecting
       const { data: contact } = await db.from("gym_contacts")
         .select("gym_id")
@@ -273,7 +283,9 @@ export default function Login() {
       gymId: profile.gym_id,
     });
 
-    navigate("/dashboard");
+    navigate(
+      profile.role === "platform_admin" ? "/oac/website-traffic" : "/dashboard",
+    );
   }
 
   async function handleMemberLogin() {
@@ -285,7 +297,12 @@ export default function Login() {
     // STRICT ROLE + ACCESS MODE CHECK
     const { data: profile } = await db.from("users").select("role, access_mode").eq("id", authUser.id).single();
 
-    if (profile && (profile.role === 'admin' || profile.role === 'super_admin')) {
+    if (
+      profile &&
+      (profile.role === "admin" ||
+        profile.role === "super_admin" ||
+        profile.role === "platform_admin")
+    ) {
       await supabase.auth.signOut();
       throw new Error("This is an Admin account. Please use the Staff / Admin login tab.");
     }
@@ -357,11 +374,10 @@ export default function Login() {
       {/* Sidebar / Left Side Branding */}
       <div className="hidden lg:flex flex-col justify-between bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--secondary))] w-[400px] p-12 text-white">
         <div className="space-y-6">
-          <div className="flex items-center">
-            <GymzLogo className="h-10 w-auto mr-3" />
-            <span className="text-4xl font-bold tracking-tighter">Gymz</span>
+          <div className="flex items-center justify-center">
+            <GymzLogo className="h-10 w-auto" />
           </div>
-          <p className="text-xl font-light opacity-80 leading-relaxed">Experience the next evolution of fitness management.</p>
+          <p className="text-xl font-light opacity-80 leading-relaxed italic">"If you can measure it, you can improve it."</p>
         </div>
         <div className="grid grid-cols-1 gap-4">
           {stats.map((s, i) => (
@@ -378,9 +394,9 @@ export default function Login() {
         <div className="w-full max-w-lg space-y-8">
           <div className="text-center space-y-4">
             <GymzLogo className="h-20 w-auto mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground/60 tracking-widest uppercase font-medium mb-8">Elevate Your Fitness Experience</p>
+
             <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(var(--secondary))] bg-clip-text text-transparent">
-              {showForgotPassword ? "Reset Password" : "Welcome back!"}
+              {showForgotPassword ? "Reset Password" : "Sign In"}
             </h1>
             <p className="text-muted-foreground text-sm">
               {showForgotPassword ? "Enter your email to receive a reset link." : "Please enter your credentials to access the system."}
@@ -510,11 +526,22 @@ export default function Login() {
                   type="button"
                   className="text-sm font-bold text-primary hover:text-primary/80 transition-all"
                   onClick={() => {
-                    const url = import.meta.env.VITE_PARTNER_APPLY_URL || "http://localhost:8084/apply";
+                    const subject = encodeURIComponent("Gymz Partner Application");
+                    const body = encodeURIComponent(
+                      "Hi Gymz Support Team,\n\n" +
+                      "I am interested in bringing Gymz to my facility. Here are some details:\n\n" +
+                      "Facility Name: \n" +
+                      "Location: \n" +
+                      "Contact Person: \n" +
+                      "Phone Number: \n\n" +
+                      "Looking forward to hearing from you!"
+                    );
+                    const mailtoUrl = `mailto:support@gymzandnutrition.com?subject=${subject}&body=${body}`;
+
                     if (typeof window !== "undefined" && (window as any).electronAPI?.openExternal) {
-                      (window as any).electronAPI.openExternal(url);
+                      (window as any).electronAPI.openExternal(mailtoUrl);
                     } else {
-                      window.open(url, "_blank", "noopener,noreferrer");
+                      window.location.href = mailtoUrl;
                     }
                   }}
                 >

@@ -1,11 +1,11 @@
 import { Check } from "lucide-react";
 
 const reasons = [
-  "Structured programs that work",
-  "Expert coaching included",
-  "Results in 30 days",
-  "Clean, modern facilities",
-  "Supportive community",
+  "Owners: one clear operating view",
+  "Coaches: less admin, more coaching",
+  "Members: clear plans and progress",
+  "Teams: consistent service across branches",
+  "Business: stronger retention",
 ];
 
 export function WhyJoinSection() {
@@ -21,7 +21,7 @@ export function WhyJoinSection() {
       </div>
       <div className="relative max-w-4xl mx-auto">
         <h2 className="text-4xl md:text-5xl font-black mb-12 text-center">
-          Why Gymz?
+          Built for your whole team
         </h2>
 
         <div className="space-y-6">

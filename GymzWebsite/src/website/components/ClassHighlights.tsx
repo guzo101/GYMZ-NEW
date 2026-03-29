@@ -20,7 +20,7 @@ export function ClassHighlights() {
       )}
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-4">
-          <h3 className="text-sm uppercase tracking-[0.3em] text-muted-foreground">Featured Classes</h3>
+          <h3 className="text-section-eyebrow uppercase">Featured Classes</h3>
           {isLoading ? (
             <SkeletonList />
           ) : (
@@ -45,7 +45,7 @@ export function ClassHighlights() {
         </div>
 
         <div className="space-y-4">
-          <h3 className="text-sm uppercase tracking-[0.3em] text-muted-foreground">Upcoming Events</h3>
+          <h3 className="text-section-eyebrow uppercase">Upcoming Events</h3>
           {isLoading ? (
             <SkeletonList />
           ) : (
@@ -70,7 +70,7 @@ export function ClassHighlights() {
         </div>
 
         <div className="space-y-4">
-          <h3 className="text-sm uppercase tracking-[0.3em] text-muted-foreground">Coaches & Support</h3>
+          <h3 className="text-section-eyebrow uppercase">Coaches & Support</h3>
           <div className="space-y-3 text-sm text-muted-foreground">
             <p className="font-semibold text-foreground">Personal training</p>
             <p>Work 1:1 with a coach for custom programs and faster results. Sessions available mornings, evenings and weekends.</p>

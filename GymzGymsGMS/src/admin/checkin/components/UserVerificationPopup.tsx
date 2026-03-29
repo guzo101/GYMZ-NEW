@@ -19,6 +19,7 @@ interface UserVerificationPopupProps {
   result: CheckInResult | null;
   onRenewMembership?: () => void;
   onOverrideAccess?: () => void;
+  onPrintAssessment?: () => void;
 }
 
 export function UserVerificationPopup({
@@ -27,6 +28,7 @@ export function UserVerificationPopup({
   result,
   onRenewMembership,
   onOverrideAccess,
+  onPrintAssessment,
 }: UserVerificationPopupProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -265,6 +267,16 @@ export function UserVerificationPopup({
             >
               <RefreshCw className="h-3.5 w-3.5 mr-2" />
               Renew Membership
+            </Button>
+          )}
+
+          {result.status === "approved" && onPrintAssessment && (
+            <Button
+              variant="default"
+              onClick={onPrintAssessment}
+              className="w-full sm:flex-1 text-sm py-2"
+            >
+              Print Onboarding Assessment
             </Button>
           )}
         </DialogFooter>

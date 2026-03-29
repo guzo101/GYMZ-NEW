@@ -2,8 +2,8 @@ import { useNavigate } from "react-router-dom";
 import {
     UserPlus,
     DollarSign,
-    Calendar,
-    CheckCircle
+    ScanLine,
+    Bell
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 
@@ -24,14 +24,14 @@ export const QuickActions = () => {
             path: "/finances",
         },
         {
-            label: "Schedule Class",
-            icon: Calendar,
+            label: "Send Reminders",
+            icon: Bell,
             color: "bg-primary/10 text-primary border-primary/20",
-            path: "/admin/gym-calendar",
+            path: "/admin/sent-notifications",
         },
         {
             label: "Quick Check-in",
-            icon: CheckCircle,
+            icon: ScanLine,
             color: "bg-primary/10 text-primary border-primary/20",
             path: "/admin/checkin",
         },

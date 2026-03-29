@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { submitWebsiteInquiry } from "../services/inquiries";
+import { SectionHeader } from "./SectionHeader";
 
 export function ContactSection() {
   const { toast } = useToast();
@@ -27,8 +28,8 @@ export function ContactSection() {
     try {
       await submitWebsiteInquiry(formState);
       toast({
-        title: "Thanks for reaching out!",
-        description: "The front desk has the message and will respond shortly.",
+        title: "Demo request received",
+        description: "Our team will contact you within a few minutes.",
       });
       setFormState({
         full_name: "",
@@ -49,46 +50,54 @@ export function ContactSection() {
   };
 
   return (
-    <section id="contact" className="space-y-10">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border bg-card/80 p-6 shadow-lg">
-          <div className="grid gap-3 md:grid-cols-2">
-            <Input
-              placeholder="Full name"
-              value={formState.full_name}
-              onChange={(e) => handleChange("full_name", e.target.value)}
-              required
+    <section id="contact" className="py-16 px-6 bg-white">
+      <div className="max-w-7xl mx-auto space-y-10">
+        <SectionHeader
+          eyebrow="Contact"
+          title="Book a Gymz demo"
+          description="Tell us about your gym and rollout goals."
+          align="center"
+        />
+        <div className="max-w-4xl mx-auto space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border bg-card/80 p-6 shadow-lg">
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input
+                placeholder="Full name"
+                value={formState.full_name}
+                onChange={(e) => handleChange("full_name", e.target.value)}
+                required
+              />
+              <Input
+                placeholder="Email"
+                type="email"
+                value={formState.email}
+                onChange={(e) => handleChange("email", e.target.value)}
+                required
+              />
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input
+                placeholder="Phone"
+                value={formState.phone}
+                onChange={(e) => handleChange("phone", e.target.value)}
+              />
+              <Input
+                placeholder="Primary goal (retention, operations, revenue)"
+                value={formState.interest}
+                onChange={(e) => handleChange("interest", e.target.value)}
+              />
+            </div>
+            <Textarea
+              placeholder="Gym size and rollout timeline (optional)."
+              rows={4}
+              value={formState.message}
+              onChange={(e) => handleChange("message", e.target.value)}
             />
-            <Input
-              placeholder="Email"
-              type="email"
-              value={formState.email}
-              onChange={(e) => handleChange("email", e.target.value)}
-              required
-            />
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <Input
-              placeholder="Phone"
-              value={formState.phone}
-              onChange={(e) => handleChange("phone", e.target.value)}
-            />
-            <Input
-              placeholder="What are you interested in?"
-              value={formState.interest}
-              onChange={(e) => handleChange("interest", e.target.value)}
-            />
-          </div>
-          <Textarea
-            placeholder="Tell us about your goals, team size, or preferred start date..."
-            rows={4}
-            value={formState.message}
-            onChange={(e) => handleChange("message", e.target.value)}
-          />
-          <Button type="submit" className="w-full" disabled={submitting}>
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send to the front desk"}
-          </Button>
-        </form>
+            <Button type="submit" className="w-full" disabled={submitting}>
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Submit Demo Request"}
+            </Button>
+          </form>
+        </div>
       </div>
     </section>
   );

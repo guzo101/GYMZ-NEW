@@ -45,13 +45,19 @@ serve(async (req) => {
       })
     }
 
-    const { user_id, title, body } = await req.json()
-    if (!user_id || !title || !body) {
-      return new Response(JSON.stringify({ error: 'user_id, title, and body are required' }), {
+    const { user_id, title, body, data: customData } = await req.json()
+
+    const normalizedTitle = typeof title === 'string' ? title.trim() : ''
+    const pushTitle = normalizedTitle.length > 0 ? normalizedTitle : 'Admin'
+
+    if (!user_id || !body) {
+      return new Response(JSON.stringify({ error: 'user_id and body are required' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
+    // Optional: pass through so the app can open a specific screen on tap (e.g. action_url, event_id, screen)
+    const data = customData && typeof customData === 'object' ? customData : undefined
 
     // Verify caller is gym admin for this member
     const { data: targetUser } = await supabaseAdmin
@@ -102,9 +108,14 @@ serve(async (req) => {
 
     const messages = tokens.map(({ token }) => ({
       to: token,
-      title: String(title),
+      title: pushTitle,
       body: String(body),
       sound: 'default' as const,
+      // Android: make sure it lands in the channel we create in-app
+      channelId: 'default',
+      // Hint delivery urgency (Expo maps to Android priority/APNs headers where possible)
+      priority: 'high' as const,
+      ...(data && Object.keys(data).length > 0 && { data }),
     }))
 
     const res = await fetch(EXPO_PUSH_URL, {
@@ -116,12 +127,21 @@ serve(async (req) => {
       body: JSON.stringify(messages.length === 1 ? messages[0] : messages),
     })
 
+    const rawText = await res.text()
+    let parsed: unknown = null
+    try {
+      parsed = rawText ? JSON.parse(rawText) : null
+    } catch {
+      parsed = rawText
+    }
+
     if (!res.ok) {
-      const errText = await res.text()
-      console.error('[send-push] Expo API error:', res.status, errText)
+      console.error('[send-push] Expo API error:', res.status, rawText)
       return new Response(JSON.stringify({
         success: false,
         error: `Expo push failed: ${res.status}`,
+        expo_status: res.status,
+        expo_response: parsed,
         sent: 0,
       }), {
         status: 500,
@@ -129,13 +149,13 @@ serve(async (req) => {
       })
     }
 
-    const result = await res.json()
-    const ticketCount = Array.isArray(result?.data) ? result.data.length : 1
+    const ticketCount = Array.isArray((parsed as any)?.data) ? (parsed as any).data.length : 1
 
     return new Response(JSON.stringify({
       success: true,
       sent: ticketCount,
       message: `Push sent to ${ticketCount} device(s)`,
+      expo_response: parsed,
     }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

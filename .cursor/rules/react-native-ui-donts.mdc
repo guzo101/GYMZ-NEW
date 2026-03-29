@@ -1,0 +1,35 @@
+---
+description: React Native UI anti-patterns - avoid these to prevent input focus and UX bugs
+globs: "**/*Screen*.tsx,**/*Form*.tsx,**/screens/**/*.tsx"
+alwaysApply: false
+---
+
+# React Native UI Don'ts
+
+## Don't: Wrap the whole screen in TouchableOpacity that dismisses keyboard
+
+**Problem:** Wrapping a screen (including TextInputs) in `TouchableOpacity` with `onPress={Keyboard.dismiss}` causes text inputs to lose focus immediately when tapped. The tap both focuses the input and triggers the parent's `onPress`, which dismisses the keyboard and unfocuses the input.
+
+```tsx
+// ❌ BAD - User cannot type; input focus is stolen
+<TouchableOpacity onPress={() => Keyboard.dismiss()} style={styles.container}>
+  <TextInput ... />
+</TouchableOpacity>
+```
+
+**Fix:** Use a plain `View` as the root. Use `ScrollView`'s `keyboardDismissMode="on-drag"` for tap-outside-to-dismiss behavior, or wrap only non-interactive background areas in a separate TouchableOpacity (not the form).
+
+```tsx
+// ✅ GOOD
+<View style={styles.container}>
+  <ScrollView keyboardDismissMode="on-drag">
+    <TextInput ... />
+  </ScrollView>
+</View>
+```
+
+## Don't: Leave invisible layout space when components dismiss
+
+**Problem:** When a component fades out (e.g. `Animated.View` with `opacity: 0`) or is hidden, it still occupies layout space if you only set `opacity` or `display: 'none'`. This creates "dead space" — blank areas where nothing is visible but layout is reserved.
+
+**Fix:** When a component is dismissed/hidden, return `null` so it is removed from the layout entirely. Do this after the animation completes (in the `Animated.timing().start()` callback).

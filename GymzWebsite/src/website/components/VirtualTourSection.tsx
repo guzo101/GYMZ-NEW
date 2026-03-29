@@ -22,15 +22,15 @@ export function VirtualTourSection() {
   };
 
   return (
-    <section className="bg-gradient-to-br from-white via-primary/20 to-white py-12 px-6">
+    <section id="how-it-works" className="bg-gradient-to-br from-white via-primary/20 to-white py-12 px-6">
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
           <div>
             <h2 className="text-2xl md:text-3xl font-black mb-6">
-              See What You Get
+              See How Gymz Works
             </h2>
             <p className="text-base text-muted-foreground mb-8 leading-relaxed">
-              See the gym, equipment, and facilities.
+              Quick walkthrough of owner, coach, and member workflows.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Button
@@ -39,16 +39,16 @@ export function VirtualTourSection() {
                 onClick={() => setIsPlaying(true)}
               >
                 <Play className="mr-2 h-4 w-4" />
-                Take Virtual Tour
+                Watch demo
               </Button>
               <Button
                 size="lg"
                 variant="outline"
                 className="border-2 border-gray-300 hover:border-[hsl(var(--primary))] px-6 py-4 text-base font-semibold"
-                onClick={() => handleNavClick("#location")}
+                onClick={() => handleNavClick("#contact")}
               >
                 <MapPin className="mr-2 h-4 w-4" />
-                Find Our Location
+                Book demo
               </Button>
             </div>
           </div>
@@ -83,8 +83,8 @@ export function VirtualTourSection() {
                     </div>
                   </div>
                   <div className="absolute bottom-6 left-6 right-6 z-10">
-                    <p className="text-white font-semibold mb-1">Facility Tour</p>
-                    <p className="text-white/80 text-sm">See our gym floor, studios, and amenities</p>
+                    <p className="text-white font-semibold mb-1">Platform Walkthrough</p>
+                    <p className="text-white/80 text-sm">See the key workflows in minutes</p>
                   </div>
                 </>
               )}

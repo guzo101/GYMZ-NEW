@@ -14,6 +14,7 @@ import { Html5Qrcode } from "html5-qrcode";
 interface QRScannerProps {
   onScan: (qrCode: string) => void;
   onClose?: () => void;
+  onUnlockAudio?: () => void;
   lastResult?: {
     status: "approved" | "rejected" | "verifying";
     message: string;
@@ -22,7 +23,7 @@ interface QRScannerProps {
   autoResetDelay?: number; // ms to wait before allowing next scan
 }
 
-export function QRScanner({ onScan, onClose, lastResult, autoResetDelay = 3000 }: QRScannerProps) {
+export function QRScanner({ onScan, onClose, onUnlockAudio, lastResult, autoResetDelay = 3000 }: QRScannerProps) {
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -337,7 +338,7 @@ export function QRScanner({ onScan, onClose, lastResult, autoResetDelay = 3000 }
               <Camera className="h-5 w-5" />
               QR Code Scanner
             </CardTitle>
-            <CardDescription>Scan a QR code using your device camera</CardDescription>
+            <CardDescription>Scan a QR code using your device camera. Click the scanner area once to enable sound.</CardDescription>
           </div>
           {onClose && (
             <Button variant="ghost" size="icon" onClick={handleClose}>
@@ -381,7 +382,12 @@ export function QRScanner({ onScan, onClose, lastResult, autoResetDelay = 3000 }
 
         <div
           ref={containerRef}
-          className="relative bg-black rounded-lg overflow-hidden aspect-video flex items-center justify-center min-h-[250px]"
+          className="relative bg-black rounded-lg overflow-hidden aspect-video flex items-center justify-center min-h-[250px] cursor-pointer"
+          onClick={() => onUnlockAudio?.()}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onUnlockAudio?.(); }}
+          aria-label="Scanner area - click to enable sound"
         >
           {/* Scanner container - always rendered for proper initialization */}
           <div
