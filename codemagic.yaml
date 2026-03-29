@@ -7,7 +7,7 @@ workflows:
       node: 22.14.0
       xcode: latest
     scripts:
-      - name: Install deps, prebuild, pods, unsigned simulator build
+      - name: Install deps, prebuild, pods
         script: |
           set -e
           APP_DIR="$CM_BUILD_DIR/Gymz"
@@ -18,31 +18,45 @@ workflows:
             npx expo prebuild --platform ios --no-install
           fi
           if [ ! -d ios ]; then
-            echo "ERROR: ios/ missing"
+            echo "ERROR: ios/ missing after prebuild"
             exit 1
           fi
           cd ios
           pod install
-          WS=$(find . -maxdepth 1 -name "*.xcworkspace" | head -1)
-          test -n "$WS"
-          WS_ABS="$APP_DIR/ios/$(basename "$WS")"
-          SCHEME=""
-          if command -v jq >/dev/null 2>&1; then
-            JSON=$(xcodebuild -list -json -workspace "$WS_ABS" 2>/dev/null) || true
-            test -n "$JSON" && SCHEME=$(echo "$JSON" | jq -r '.workspace.schemes[]? | select(startswith("Pods-") | not)' | head -1) || true
-          fi
-          if [ -z "$SCHEME" ] || [ "$SCHEME" = "null" ]; then
-            SCHEME=$(cd "$APP_DIR" && node -p "require('./app.config.js').expo.name")
-          fi
-          test -n "$SCHEME"
+
+      - name: Build unsigned simulator .app
+        script: |
+          set -e
+          APP_DIR="$CM_BUILD_DIR/Gymz"
+          DERIVED_DATA="$CM_BUILD_DIR/build"
+          BUILD_OUTPUT="$DERIVED_DATA/Build/Products/Debug-iphonesimulator"
+
+          WS_ABS=$(find "$APP_DIR/ios" -maxdepth 1 -name "*.xcworkspace" | head -1)
+          test -n "$WS_ABS" || { echo "ERROR: no .xcworkspace found"; exit 1; }
+
+          SCHEME="Gymz"
+
+          echo "=== Build config ==="
+          echo "Workspace : $WS_ABS"
+          echo "Scheme    : $SCHEME"
+          echo "DerivedData: $DERIVED_DATA"
+          echo "===================="
+
           xcodebuild build \
             -workspace "$WS_ABS" \
             -scheme "$SCHEME" \
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
+            -derivedDataPath "$DERIVED_DATA" \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            | xcpretty || true
+
+          echo "=== .app files found ==="
+          find "$DERIVED_DATA" -name "*.app" -type d
+          echo "========================"
+
     artifacts:
-      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
+      - $CM_BUILD_DIR/build/Build/Products/Debug-iphonesimulator/*.app
