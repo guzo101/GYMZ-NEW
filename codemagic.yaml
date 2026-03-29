@@ -35,12 +35,14 @@ workflows:
           cd ios
           pod install
 
-      - name: Build unsigned simulator .app (iphonesimulator, no signing)
+      # Release (not Debug): Debug expects Metro; App Preview has no packager — JS must be embedded.
+      - name: Build unsigned simulator .app (Release, embedded JS, no signing)
         script: |
           set -e
           set -o pipefail
           APP_DIR="$CM_BUILD_DIR/$GYMZ_APP_DIR"
           DERIVED_DATA="$CM_BUILD_DIR/$IOS_BUILD_ROOT"
+          export CI=1
 
           WS_ABS=$(find "$APP_DIR/ios" -maxdepth 1 -name "*.xcworkspace" | head -1)
           test -n "$WS_ABS" || { echo "ERROR: no .xcworkspace found"; exit 1; }
@@ -50,6 +52,7 @@ workflows:
           echo "=== Build config ==="
           echo "Workspace    : $WS_ABS"
           echo "Scheme       : $SCHEME"
+          echo "Configuration: Release (embedded bundle for App Preview)"
           echo "derivedDataPath (deterministic): $DERIVED_DATA"
           echo "===================="
 
@@ -59,7 +62,7 @@ workflows:
               -scheme "$SCHEME" \
               -sdk iphonesimulator \
               -destination 'generic/platform=iOS Simulator' \
-              -configuration Debug \
+              -configuration Release \
               -derivedDataPath "$DERIVED_DATA" \
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
@@ -71,7 +74,7 @@ workflows:
               -scheme "$SCHEME" \
               -sdk iphonesimulator \
               -destination 'generic/platform=iOS Simulator' \
-              -configuration Debug \
+              -configuration Release \
               -derivedDataPath "$DERIVED_DATA" \
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
@@ -86,7 +89,7 @@ workflows:
           set -e
           APP_DIR="$CM_BUILD_DIR/$GYMZ_APP_DIR"
           DERIVED_DATA="$CM_BUILD_DIR/$IOS_BUILD_ROOT"
-          PROD_DIR="$DERIVED_DATA/Build/Products/Debug-iphonesimulator"
+          PROD_DIR="$DERIVED_DATA/Build/Products/Release-iphonesimulator"
           PREVIEW_DIR="$CM_BUILD_DIR/$IOS_APP_PREVIEW_DIR"
 
           test -d "$PROD_DIR" || { echo "ERROR: expected Xcode output missing: $PROD_DIR"; exit 1; }
@@ -101,6 +104,15 @@ workflows:
           echo "=== App Preview artifact (for Quick Launch) ==="
           echo "$PREVIEW_DIR/Gymz.app"
           ls -la "$PREVIEW_DIR/Gymz.app"
+
+          echo "=== Embedded JS (required without Metro) ==="
+          if [ -f "$PREVIEW_DIR/Gymz.app/main.jsbundle" ]; then
+            ls -la "$PREVIEW_DIR/Gymz.app/main.jsbundle"
+          else
+            echo "main.jsbundle not at .app root; listing .app (Hermes may use Assets):"
+            find "$PREVIEW_DIR/Gymz.app" -maxdepth 3 \( -name "*.jsbundle" -o -name "*.hbc" \) 2>/dev/null || true
+            ls -la "$PREVIEW_DIR/Gymz.app" || true
+          fi
 
           echo "=== All .app paths (debug) ==="
           find "$CM_BUILD_DIR/$IOS_BUILD_ROOT" -name "*.app" -type d
