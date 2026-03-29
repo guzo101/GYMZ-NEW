@@ -1,3 +1,8 @@
+# iOS: Codemagic App Preview (browser simulator) uses the simulator .app listed in `artifacts`.
+# Enable the feature for your team in Codemagic: App Preview in the sidebar (Teams plan).
+# After a successful build, use Quick Launch next to the .app artifact to open the simulator in the browser.
+# Docs: https://docs.codemagic.io/yaml-testing/app-preview/
+
 workflows:
   ios-simulator-preview:
     name: iOS Simulator preview
@@ -6,11 +11,17 @@ workflows:
     environment:
       node: 22.14.0
       xcode: latest
+      vars:
+        # Deterministic paths (relative to repo root = $CM_BUILD_DIR)
+        GYMZ_APP_DIR: Gymz
+        IOS_BUILD_ROOT: Gymz/build
+        IOS_APP_PREVIEW_DIR: Gymz/build/app-preview
+        IOS_APP_PREVIEW_APP: Gymz/build/app-preview/Gymz.app
     scripts:
       - name: Install deps, prebuild, pods
         script: |
           set -e
-          APP_DIR="$CM_BUILD_DIR/Gymz"
+          APP_DIR="$CM_BUILD_DIR/$GYMZ_APP_DIR"
           test -d "$APP_DIR" || { echo "ERROR: Gymz/ not found"; exit 1; }
           cd "$APP_DIR"
           npm ci
@@ -24,12 +35,12 @@ workflows:
           cd ios
           pod install
 
-      - name: Build unsigned simulator .app
+      - name: Build unsigned simulator .app (iphonesimulator, no signing)
         script: |
           set -e
-          APP_DIR="$CM_BUILD_DIR/Gymz"
-          DERIVED_DATA="$CM_BUILD_DIR/build"
-          BUILD_OUTPUT="$DERIVED_DATA/Build/Products/Debug-iphonesimulator"
+          set -o pipefail
+          APP_DIR="$CM_BUILD_DIR/$GYMZ_APP_DIR"
+          DERIVED_DATA="$CM_BUILD_DIR/$IOS_BUILD_ROOT"
 
           WS_ABS=$(find "$APP_DIR/ios" -maxdepth 1 -name "*.xcworkspace" | head -1)
           test -n "$WS_ABS" || { echo "ERROR: no .xcworkspace found"; exit 1; }
@@ -37,26 +48,70 @@ workflows:
           SCHEME="Gymz"
 
           echo "=== Build config ==="
-          echo "Workspace : $WS_ABS"
-          echo "Scheme    : $SCHEME"
-          echo "DerivedData: $DERIVED_DATA"
+          echo "Workspace    : $WS_ABS"
+          echo "Scheme       : $SCHEME"
+          echo "derivedDataPath (deterministic): $DERIVED_DATA"
           echo "===================="
 
-          xcodebuild build \
-            -workspace "$WS_ABS" \
-            -scheme "$SCHEME" \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
-            -configuration Debug \
-            -derivedDataPath "$DERIVED_DATA" \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            | xcpretty || true
+          if command -v xcpretty >/dev/null 2>&1; then
+            xcodebuild build \
+              -workspace "$WS_ABS" \
+              -scheme "$SCHEME" \
+              -sdk iphonesimulator \
+              -destination 'generic/platform=iOS Simulator' \
+              -configuration Debug \
+              -derivedDataPath "$DERIVED_DATA" \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              | xcpretty
+          else
+            xcodebuild build \
+              -workspace "$WS_ABS" \
+              -scheme "$SCHEME" \
+              -sdk iphonesimulator \
+              -destination 'generic/platform=iOS Simulator' \
+              -configuration Debug \
+              -derivedDataPath "$DERIVED_DATA" \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO
+          fi
 
-          echo "=== .app files found ==="
+          echo "=== .app bundles under DerivedData ==="
           find "$DERIVED_DATA" -name "*.app" -type d
-          echo "========================"
+
+      - name: Prepare App Preview artifact + verify simulator build
+        script: |
+          set -e
+          APP_DIR="$CM_BUILD_DIR/$GYMZ_APP_DIR"
+          DERIVED_DATA="$CM_BUILD_DIR/$IOS_BUILD_ROOT"
+          PROD_DIR="$DERIVED_DATA/Build/Products/Debug-iphonesimulator"
+          PREVIEW_DIR="$CM_BUILD_DIR/$IOS_APP_PREVIEW_DIR"
+
+          test -d "$PROD_DIR" || { echo "ERROR: expected Xcode output missing: $PROD_DIR"; exit 1; }
+
+          BUILT_APP=$(find "$PROD_DIR" -maxdepth 1 -name "*.app" -type d | head -1)
+          test -n "$BUILT_APP" || { echo "ERROR: no .app in $PROD_DIR"; exit 1; }
+
+          mkdir -p "$PREVIEW_DIR"
+          rm -rf "$PREVIEW_DIR/Gymz.app"
+          cp -R "$BUILT_APP" "$PREVIEW_DIR/Gymz.app"
+
+          echo "=== App Preview artifact (for Quick Launch) ==="
+          echo "$PREVIEW_DIR/Gymz.app"
+          ls -la "$PREVIEW_DIR/Gymz.app"
+
+          echo "=== All .app paths (debug) ==="
+          find "$CM_BUILD_DIR/$IOS_BUILD_ROOT" -name "*.app" -type d
+
+          echo "=== Simulator binary check (expect simulator archs, not device-only arm64) ==="
+          BIN=$(find "$PREVIEW_DIR/Gymz.app" -type f -perm +111 ! -path "*.framework/*" | head -1)
+          if [ -n "$BIN" ]; then
+            file "$BIN" || true
+            lipo -info "$BIN" 2>/dev/null || true
+          fi
 
     artifacts:
-      - $CM_BUILD_DIR/build/Build/Products/Debug-iphonesimulator/*.app
+      # Single canonical simulator .app — Codemagic App Preview "Quick Launch" (browser) uses this path
+      - Gymz/build/app-preview/Gymz.app
